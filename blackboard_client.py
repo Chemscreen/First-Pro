@@ -1,19 +1,20 @@
 """
-Blackboard LMS Client
-=====================
-Connects to your college's Blackboard instance to pull courses,
-assignments, grades, and course materials.
+Drexel University LMS Client
+=============================
+Interactive client for browsing courses, downloading materials,
+and checking grades on both Canvas and Blackboard.
 
-Usage:
-  1. Copy .env.example to .env and fill in your credentials
-  2. Run: python blackboard_client.py
+For the quick auto-download version, use pull_courses.py instead.
 
-Authentication methods supported:
-  - REST API (OAuth2 client credentials)
-  - Session cookies (from your browser)
+Setup:
+  1. pip install requests python-dotenv
+  2. cp .env.example .env
+  3. Add CANVAS_TOKEN and/or BB_COOKIES
+  4. python blackboard_client.py
 """
 
 import os
+import sys
 import json
 import requests
 from pathlib import Path
@@ -23,233 +24,242 @@ try:
     from dotenv import load_dotenv
     load_dotenv()
 except ImportError:
-    pass  # .env loading is optional
+    pass
 
 
-class BlackboardClient:
+class DrexelCanvasClient:
+    """Client for Drexel's Canvas LMS (new system)."""
+
     def __init__(self):
-        self.base_url = os.getenv("BB_BASE_URL", "").rstrip("/")
+        self.base_url = os.getenv("CANVAS_BASE_URL", "https://drexel.instructure.com").rstrip("/")
+        self.api = f"{self.base_url}/api/v1"
         self.session = requests.Session()
-        self.token = None
+        token = os.getenv("CANVAS_TOKEN", "")
+        if token:
+            self.session.headers["Authorization"] = f"Bearer {token}"
+        self.available = bool(token)
 
-        if not self.base_url:
-            raise ValueError(
-                "BB_BASE_URL not set. Set it in .env or as an environment variable.\n"
-                "Example: BB_BASE_URL=https://yourcollege.blackboard.com"
-            )
-
-    # ── Authentication ──────────────────────────────────────────────
-
-    def auth_oauth(self):
-        """Authenticate via OAuth2 client credentials (REST API)."""
-        key = os.getenv("BB_API_KEY")
-        secret = os.getenv("BB_API_SECRET")
-        if not key or not secret:
-            raise ValueError("BB_API_KEY and BB_API_SECRET must be set in .env")
-
-        resp = self.session.post(
-            f"{self.base_url}/learn/api/public/v1/oauth2/token",
-            data={"grant_type": "client_credentials"},
-            auth=(key, secret),
-        )
-        resp.raise_for_status()
-        self.token = resp.json()["access_token"]
-        self.session.headers["Authorization"] = f"Bearer {self.token}"
-        print("Authenticated via OAuth2.")
-
-    def auth_cookies(self):
-        """Authenticate using browser session cookies."""
-        cookie_str = os.getenv("BB_COOKIES")
-        if not cookie_str:
-            raise ValueError(
-                "BB_COOKIES not set. Log into Blackboard in your browser, then:\n"
-                "  1. Open DevTools (F12) > Application > Cookies\n"
-                "  2. Copy all cookies as a single string\n"
-                "  3. Set BB_COOKIES in your .env file"
-            )
-        for pair in cookie_str.split(";"):
-            pair = pair.strip()
-            if "=" in pair:
-                name, value = pair.split("=", 1)
-                self.session.cookies.set(name.strip(), value.strip())
-        print("Authenticated via session cookies.")
-
-    def authenticate(self):
-        """Auto-detect and use the best available auth method."""
-        if os.getenv("BB_API_KEY"):
-            self.auth_oauth()
-        elif os.getenv("BB_COOKIES"):
-            self.auth_cookies()
-        else:
-            raise ValueError(
-                "No credentials found. Set one of:\n"
-                "  - BB_API_KEY + BB_API_SECRET (for REST API)\n"
-                "  - BB_COOKIES (for browser session)\n"
-                "See .env.example for details."
-            )
-
-    # ── API Methods ─────────────────────────────────────────────────
-
-    def _get(self, endpoint, params=None):
-        """Make a GET request to the Blackboard REST API."""
-        url = f"{self.base_url}/learn/api/public/v1{endpoint}"
-        resp = self.session.get(url, params=params)
-        resp.raise_for_status()
-        return resp.json()
-
-    def get_user_info(self):
-        """Get info about the authenticated user."""
-        return self._get("/users/me")
+    def test_connection(self):
+        if not self.available:
+            return False
+        resp = self.session.get(f"{self.api}/users/self")
+        if resp.ok:
+            user = resp.json()
+            print(f"Canvas: Logged in as {user.get('name', 'Unknown')}")
+            return True
+        print("Canvas: Auth failed — check your CANVAS_TOKEN")
+        return False
 
     def get_courses(self):
-        """Get all courses the user is enrolled in."""
-        data = self._get("/users/me/courses")
-        return data.get("results", [])
-
-    def get_course_details(self, course_id):
-        """Get details for a specific course."""
-        return self._get(f"/courses/{course_id}")
-
-    def get_course_contents(self, course_id):
-        """Get the content tree for a course."""
-        data = self._get(f"/courses/{course_id}/contents")
-        return data.get("results", [])
+        resp = self.session.get(f"{self.api}/courses", params={
+            "enrollment_state": "active", "per_page": 100,
+            "include[]": ["term", "total_scores"],
+        })
+        return resp.json() if resp.ok else []
 
     def get_assignments(self, course_id):
-        """Get assignments/columns for a course."""
-        data = self._get(f"/courses/{course_id}/gradebook/columns")
-        return data.get("results", [])
+        resp = self.session.get(f"{self.api}/courses/{course_id}/assignments", params={
+            "per_page": 100, "order_by": "due_at",
+        })
+        return resp.json() if resp.ok and isinstance(resp.json(), list) else []
 
     def get_grades(self, course_id):
-        """Get the user's grades for a course."""
-        user = self.get_user_info()
-        user_id = user["id"]
-        data = self._get(f"/courses/{course_id}/gradebook/users/{user_id}")
-        return data.get("results", [])
+        resp = self.session.get(f"{self.api}/courses/{course_id}/enrollments", params={
+            "user_id": "self", "include[]": "current_points",
+        })
+        return resp.json() if resp.ok and isinstance(resp.json(), list) else []
 
-    def download_attachment(self, course_id, content_id, output_dir="course_materials"):
-        """Download attachments from a content item."""
-        data = self._get(f"/courses/{course_id}/contents/{content_id}/attachments")
-        attachments = data.get("results", [])
+    def download_files(self, course_id, output_dir):
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        resp = self.session.get(f"{self.api}/courses/{course_id}/files", params={"per_page": 100})
+        files = resp.json() if resp.ok and isinstance(resp.json(), list) else []
+        count = 0
+        for f in files:
+            filename = f.get("display_name", f.get("filename", "unknown"))
+            dl_url = f.get("url")
+            if dl_url:
+                dl_resp = self.session.get(dl_url, stream=True)
+                if dl_resp.ok:
+                    with open(output_dir / filename, "wb") as out:
+                        for chunk in dl_resp.iter_content(chunk_size=8192):
+                            out.write(chunk)
+                    print(f"  Downloaded: {filename}")
+                    count += 1
+        return count
 
-        output_path = Path(output_dir)
-        output_path.mkdir(parents=True, exist_ok=True)
 
-        for att in attachments:
-            att_id = att["id"]
-            filename = att.get("fileName", f"attachment_{att_id}")
-            url = f"{self.base_url}/learn/api/public/v1/courses/{course_id}/contents/{content_id}/attachments/{att_id}/download"
-            resp = self.session.get(url, stream=True)
-            resp.raise_for_status()
+class DrexelBlackboardClient:
+    """Client for Drexel Learn / Blackboard (legacy system)."""
 
-            filepath = output_path / filename
-            with open(filepath, "wb") as f:
-                for chunk in resp.iter_content(chunk_size=8192):
-                    f.write(chunk)
-            print(f"  Downloaded: {filepath}")
+    def __init__(self):
+        self.base_url = os.getenv("BB_BASE_URL", "https://learn.dcollege.net").rstrip("/")
+        self.api = f"{self.base_url}/learn/api/public/v1"
+        self.session = requests.Session()
+        cookies_str = os.getenv("BB_COOKIES", "")
+        if cookies_str:
+            for pair in cookies_str.split(";"):
+                pair = pair.strip()
+                if "=" in pair:
+                    name, value = pair.split("=", 1)
+                    self.session.cookies.set(name.strip(), value.strip())
+        self.available = bool(cookies_str)
 
-        return attachments
+    def test_connection(self):
+        if not self.available:
+            return False
+        resp = self.session.get(f"{self.api}/users/me")
+        if resp.ok:
+            user = resp.json()
+            name = f"{user.get('name', {}).get('given', '')} {user.get('name', {}).get('family', '')}"
+            print(f"Blackboard: Logged in as {name}")
+            return True
+        print("Blackboard: Auth failed — cookies may be expired")
+        return False
 
-    # ── High-level Actions ──────────────────────────────────────────
+    def get_courses(self):
+        resp = self.session.get(f"{self.api}/users/me/courses")
+        return resp.json().get("results", []) if resp.ok else []
 
-    def list_all_courses(self):
-        """Print a summary of all enrolled courses."""
-        courses = self.get_courses()
-        print(f"\nFound {len(courses)} course(s):\n")
-        for i, c in enumerate(courses, 1):
-            course_id = c.get("courseId", "unknown")
-            details = self.get_course_details(course_id)
-            name = details.get("name", course_id)
-            print(f"  {i}. {name} ({course_id})")
-        return courses
+    def get_course_details(self, course_id):
+        resp = self.session.get(f"{self.api}/courses/{course_id}")
+        return resp.json() if resp.ok else {}
 
-    def download_all_materials(self, course_id, output_dir=None):
-        """Download all content attachments for a course."""
-        if output_dir is None:
-            details = self.get_course_details(course_id)
-            course_name = details.get("name", course_id).replace(" ", "_")
-            output_dir = f"course_materials/{course_name}"
+    def get_assignments(self, course_id):
+        resp = self.session.get(f"{self.api}/courses/{course_id}/gradebook/columns")
+        return resp.json().get("results", []) if resp.ok else []
 
-        contents = self.get_course_contents(course_id)
-        print(f"\nDownloading materials for course {course_id}...")
-        print(f"Found {len(contents)} content item(s).\n")
-
+    def download_files(self, course_id, output_dir):
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        resp = self.session.get(f"{self.api}/courses/{course_id}/contents")
+        contents = resp.json().get("results", []) if resp.ok else []
+        count = 0
         for item in contents:
-            title = item.get("title", "Untitled")
             content_id = item["id"]
-            print(f"  [{title}]")
-            try:
-                self.download_attachment(course_id, content_id, output_dir)
-            except requests.HTTPError:
-                pass  # Not all content items have attachments
-
-    def show_upcoming_assignments(self):
-        """Show upcoming assignments across all courses."""
-        courses = self.get_courses()
-        print("\n=== Upcoming Assignments ===\n")
-
-        for c in courses:
-            course_id = c.get("courseId", "unknown")
-            try:
-                details = self.get_course_details(course_id)
-                course_name = details.get("name", course_id)
-                assignments = self.get_assignments(course_id)
-
-                upcoming = [
-                    a for a in assignments
-                    if a.get("due") and a["due"] > datetime.now().isoformat()
-                ]
-
-                if upcoming:
-                    print(f"  {course_name}:")
-                    for a in sorted(upcoming, key=lambda x: x.get("due", "")):
-                        name = a.get("name", "Unnamed")
-                        due = a.get("due", "No due date")
-                        print(f"    - {name} (due: {due})")
-                    print()
-            except requests.HTTPError:
+            att_resp = self.session.get(f"{self.api}/courses/{course_id}/contents/{content_id}/attachments")
+            if not att_resp.ok:
                 continue
+            for att in att_resp.json().get("results", []):
+                att_id = att["id"]
+                filename = att.get("fileName", f"file_{att_id}")
+                dl_url = f"{self.api}/courses/{course_id}/contents/{content_id}/attachments/{att_id}/download"
+                dl_resp = self.session.get(dl_url, stream=True)
+                if dl_resp.ok:
+                    with open(output_dir / filename, "wb") as f:
+                        for chunk in dl_resp.iter_content(chunk_size=8192):
+                            f.write(chunk)
+                    print(f"  Downloaded: {filename}")
+                    count += 1
+        return count
 
 
 def main():
-    client = BlackboardClient()
+    print("=" * 50)
+    print("  Drexel University LMS Client")
+    print("=" * 50)
+    print()
 
-    try:
-        client.authenticate()
-    except ValueError as e:
-        print(f"Auth error: {e}")
+    canvas = DrexelCanvasClient()
+    bb = DrexelBlackboardClient()
+
+    canvas_ok = canvas.test_connection()
+    bb_ok = bb.test_connection()
+    print()
+
+    if not canvas_ok and not bb_ok:
+        print("No LMS connections available.")
+        print()
+        print("Quick setup (Canvas — 30 seconds):")
+        print("  1. Go to https://drexel.instructure.com")
+        print("  2. Profile > Settings > + New Access Token")
+        print("  3. Paste token into .env as CANVAS_TOKEN=...")
         return
 
-    print("\n=== Blackboard Client ===")
-    print("1. List courses")
-    print("2. Show upcoming assignments")
-    print("3. Download course materials")
-    print("4. Show grades")
+    # Collect all courses
+    all_courses = []
+    if canvas_ok:
+        for c in canvas.get_courses():
+            all_courses.append(("canvas", c["id"], c.get("name", f"Course {c['id']}")))
+    if bb_ok:
+        for e in bb.get_courses():
+            cid = e.get("courseId", "")
+            details = bb.get_course_details(cid)
+            all_courses.append(("bb", cid, details.get("name", cid)))
 
-    choice = input("\nSelect an option (1-4): ").strip()
+    while True:
+        print("\n── Menu ──")
+        print("1. List all courses")
+        print("2. Show upcoming assignments")
+        print("3. Download course materials")
+        print("4. Show grades")
+        print("5. Quit")
 
-    if choice == "1":
-        client.list_all_courses()
-    elif choice == "2":
-        client.show_upcoming_assignments()
-    elif choice == "3":
-        courses = client.list_all_courses()
-        idx = input("\nEnter course number to download: ").strip()
-        if idx.isdigit() and 1 <= int(idx) <= len(courses):
-            course_id = courses[int(idx) - 1]["courseId"]
-            client.download_all_materials(course_id)
-    elif choice == "4":
-        courses = client.list_all_courses()
-        idx = input("\nEnter course number: ").strip()
-        if idx.isdigit() and 1 <= int(idx) <= len(courses):
-            course_id = courses[int(idx) - 1]["courseId"]
-            grades = client.get_grades(course_id)
-            for g in grades:
-                col = g.get("columnName", "Unknown")
-                score = g.get("displayGrade", {}).get("text", "N/A")
-                print(f"  {col}: {score}")
-    else:
-        print("Invalid option.")
+        choice = input("\nChoice (1-5): ").strip()
+
+        if choice == "1":
+            print(f"\n{len(all_courses)} course(s):\n")
+            for i, (src, cid, name) in enumerate(all_courses, 1):
+                tag = "Canvas" if src == "canvas" else "BB"
+                print(f"  {i}. [{tag}] {name}")
+
+        elif choice == "2":
+            print("\n── Upcoming Assignments ──\n")
+            now = datetime.now().isoformat()
+            for src, cid, name in all_courses:
+                if src == "canvas":
+                    assignments = canvas.get_assignments(cid)
+                    upcoming = [a for a in assignments if a.get("due_at") and a["due_at"] > now]
+                    if upcoming:
+                        print(f"  {name}:")
+                        for a in sorted(upcoming, key=lambda x: x.get("due_at", "")):
+                            print(f"    - {a['name']} (due: {a['due_at'][:10]}, {a.get('points_possible', '?')} pts)")
+                        print()
+                else:
+                    assignments = bb.get_assignments(cid)
+                    upcoming = [a for a in assignments if a.get("due") and a["due"] > now]
+                    if upcoming:
+                        print(f"  {name}:")
+                        for a in sorted(upcoming, key=lambda x: x.get("due", "")):
+                            print(f"    - {a['name']} (due: {a.get('due', 'N/A')[:10]})")
+                        print()
+
+        elif choice == "3":
+            print()
+            for i, (src, cid, name) in enumerate(all_courses, 1):
+                tag = "Canvas" if src == "canvas" else "BB"
+                print(f"  {i}. [{tag}] {name}")
+            idx = input("\nCourse number (or 'all'): ").strip()
+            if idx.lower() == "all":
+                targets = list(enumerate(all_courses))
+            elif idx.isdigit() and 1 <= int(idx) <= len(all_courses):
+                targets = [(int(idx) - 1, all_courses[int(idx) - 1])]
+            else:
+                print("Invalid selection.")
+                continue
+            for _, (src, cid, name) in targets:
+                safe = "".join(c if c.isalnum() or c in " _-" else "_" for c in name).strip()
+                subdir = "canvas" if src == "canvas" else "blackboard"
+                out = f"course_materials/{subdir}/{safe}"
+                print(f"\nDownloading {name}...")
+                if src == "canvas":
+                    canvas.download_files(cid, out)
+                else:
+                    bb.download_files(cid, out)
+
+        elif choice == "4":
+            print("\n── Grades ──\n")
+            for src, cid, name in all_courses:
+                if src == "canvas":
+                    enrollments = canvas.get_grades(cid)
+                    for e in enrollments:
+                        g = e.get("grades", {})
+                        if g:
+                            print(f"  {name}: {g.get('current_grade', 'N/A')} ({g.get('current_score', 'N/A')}%)")
+
+        elif choice == "5":
+            print("Done.")
+            break
 
 
 if __name__ == "__main__":
