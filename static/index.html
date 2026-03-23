@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Drexel Autopilot</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- Nav -->
+  <nav class="nav">
+    <div class="nav-inner">
+      <div class="nav-brand">
+        <div class="nav-logo">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+          </svg>
+        </div>
+        <span class="nav-title">Drexel Autopilot</span>
+      </div>
+      <div class="nav-links">
+        <button class="nav-link active" data-view="dashboard">Dashboard</button>
+        <button class="nav-link" data-view="assignments">Assignments</button>
+        <button class="nav-link" data-view="grades">Grades</button>
+      </div>
+      <div class="nav-user" id="nav-user"></div>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="main">
+
+    <!-- Dashboard View -->
+    <section id="view-dashboard" class="view active">
+      <div class="hero">
+        <h1 class="hero-greeting" id="greeting"></h1>
+        <p class="hero-sub" id="hero-sub">Here's your academic overview.</p>
+      </div>
+
+      <!-- Quick Stats -->
+      <div class="stats-row" id="stats-row">
+        <div class="stat-card glass">
+          <span class="stat-label">Active Courses</span>
+          <span class="stat-value" id="stat-courses">—</span>
+        </div>
+        <div class="stat-card glass">
+          <span class="stat-label">Due This Week</span>
+          <span class="stat-value" id="stat-due-week">—</span>
+        </div>
+        <div class="stat-card glass">
+          <span class="stat-label">GPA Estimate</span>
+          <span class="stat-value" id="stat-gpa">—</span>
+        </div>
+      </div>
+
+      <!-- Up Next -->
+      <div class="section">
+        <div class="section-header">
+          <h2>Up Next</h2>
+          <button class="link-btn" data-view="assignments">See All</button>
+        </div>
+        <div class="card-list" id="up-next-list">
+          <div class="skeleton-card"></div>
+          <div class="skeleton-card"></div>
+          <div class="skeleton-card"></div>
+        </div>
+      </div>
+
+      <!-- Courses -->
+      <div class="section">
+        <div class="section-header">
+          <h2>Your Courses</h2>
+        </div>
+        <div class="course-grid" id="course-grid">
+          <div class="skeleton-course"></div>
+          <div class="skeleton-course"></div>
+          <div class="skeleton-course"></div>
+          <div class="skeleton-course"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Assignments View -->
+    <section id="view-assignments" class="view">
+      <div class="view-header">
+        <h1>Assignments</h1>
+        <div class="filter-pills">
+          <button class="pill active" data-filter="upcoming">Upcoming</button>
+          <button class="pill" data-filter="submitted">Submitted</button>
+          <button class="pill" data-filter="all">All</button>
+        </div>
+      </div>
+      <div class="assignments-list" id="assignments-list"></div>
+    </section>
+
+    <!-- Grades View -->
+    <section id="view-grades" class="view">
+      <div class="view-header">
+        <h1>Grades</h1>
+      </div>
+      <div class="grades-grid" id="grades-grid"></div>
+    </section>
+
+    <!-- Course Detail View -->
+    <section id="view-course" class="view">
+      <button class="back-btn" data-view="dashboard">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        Back
+      </button>
+      <div id="course-detail"></div>
+    </section>
+
+    <!-- Setup View -->
+    <section id="view-setup" class="view">
+      <div class="setup-container">
+        <div class="setup-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </div>
+        <h1>Connect to Canvas</h1>
+        <p class="setup-sub">Generate an access token to get started. It takes 30 seconds.</p>
+        <div class="setup-steps">
+          <div class="step">
+            <span class="step-num">1</span>
+            <span>Go to <a href="https://drexel.instructure.com/profile/settings" target="_blank">Canvas Settings</a></span>
+          </div>
+          <div class="step">
+            <span class="step-num">2</span>
+            <span>Scroll to <strong>Approved Integrations</strong></span>
+          </div>
+          <div class="step">
+            <span class="step-num">3</span>
+            <span>Click <strong>+ New Access Token</strong></span>
+          </div>
+          <div class="step">
+            <span class="step-num">4</span>
+            <span>Copy the token into your <code>.env</code> file</span>
+          </div>
+          <div class="step">
+            <span class="step-num">5</span>
+            <span>Restart the server</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>
