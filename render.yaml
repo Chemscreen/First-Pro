@@ -4,7 +4,7 @@ services:
     runtime: docker
     plan: free
     repo: https://github.com/ByteSizeData/First-Pro
-    branch: master
+    branch: claude/auto-research-blackboard-e38bX
     healthCheckPath: /login
     envVars:
       - key: DREXEL_USERNAME

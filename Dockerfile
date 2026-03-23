@@ -27,11 +27,13 @@ RUN playwright install --with-deps chromium
 # Copy app code
 COPY . .
 
-# Render uses PORT env var
+# PORT is set by the hosting platform (Render, Fly.io, Railway, etc.)
 ENV PORT=10000
 ENV DISPLAY=:99
-# Reduce Chromium memory usage
+
+# Chromium memory optimizations
 ENV PLAYWRIGHT_CHROMIUM_SANDBOX=0
+ENV CHROMIUM_FLAGS="--disable-gpu --disable-dev-shm-usage --disable-software-rasterizer --no-zygote --single-process --disable-extensions"
 
 EXPOSE 10000
 
