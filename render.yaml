@@ -4,7 +4,7 @@ services:
     runtime: docker
     plan: free
     repo: https://github.com/Chemscreen/First-Pro
-    branch: main
+    branch: master
     healthCheckPath: /login
     envVars:
       - key: DREXEL_USERNAME
