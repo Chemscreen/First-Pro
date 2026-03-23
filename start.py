@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Drexel Autopilot — One-Command Launcher
-=========================================
+SchuBase Auto Pilot — One-Command Launcher
+============================================
 Run this and everything happens automatically:
   1. Checks dependencies
   2. Logs into Blackboard via browser-use
@@ -116,8 +116,8 @@ def start_server():
     import webbrowser
     print()
     print("  ╔═══════════════════════════════════╗")
-    print("  ║       Drexel Autopilot            ║")
-    print("  ║       http://localhost:5000        ║")
+    print("  ║       SchuBase Auto Pilot        ║")
+    print("  ║       http://localhost:5000       ║")
     print("  ╚═══════════════════════════════════╝")
     print()
     print("  Opening browser...")
@@ -129,7 +129,7 @@ def start_server():
 
 def main():
     print()
-    print("  Drexel Autopilot — Starting Up")
+    print("  SchuBase Auto Pilot — Starting Up")
     print("  " + "=" * 35)
     print()
 

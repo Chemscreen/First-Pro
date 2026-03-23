@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: schubase
+    runtime: docker
+    plan: free
+    envVars:
+      - key: DREXEL_USERNAME
+        sync: false
+      - key: DREXEL_PASSWORD
+        sync: false
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: SCHUBASE_PASSWORD
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true

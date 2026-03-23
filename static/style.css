@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════
-   Drexel Autopilot — Apple-inspired Design System
+   SchuBase Auto Pilot — Design System
    ══════════════════════════════════════════════════ */
 
 :root {
@@ -914,4 +914,125 @@ a:hover {
   .assignment-points {
     display: none;
   }
+}
+
+/* ── Login Page ─────────────────────────────────── */
+
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  padding: 24px;
+}
+
+.login-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 48px 40px;
+  max-width: 400px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+}
+
+.login-logo {
+  width: 56px;
+  height: 56px;
+  background: var(--blue);
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gold);
+  margin-bottom: 20px;
+}
+
+.login-card h1 {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  margin-bottom: 4px;
+}
+
+.login-card .login-sub {
+  font-size: 15px;
+  color: var(--text-secondary);
+  margin-bottom: 28px;
+}
+
+.login-input {
+  width: 100%;
+  padding: 12px 16px;
+  font-size: 15px;
+  font-family: var(--font);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.2s;
+  margin-bottom: 12px;
+}
+
+.login-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(7, 41, 77, 0.1);
+}
+
+.login-btn {
+  width: 100%;
+  padding: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: var(--font);
+  background: var(--blue);
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-top: 4px;
+}
+
+.login-btn:hover {
+  background: #0a3a6b;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(7, 41, 77, 0.3);
+}
+
+.login-error {
+  color: var(--red);
+  font-size: 13px;
+  margin-top: 12px;
+  display: none;
+}
+
+.login-trigger-btn {
+  display: inline-block;
+  margin-top: 24px;
+  padding: 12px 32px;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: var(--font);
+  background: var(--blue);
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.login-trigger-btn:hover {
+  background: #0a3a6b;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(7, 41, 77, 0.3);
+}
+
+.login-footer {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-top: 20px;
 }

@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════
-   Drexel Autopilot — Frontend Logic
+   SchuBase Auto Pilot — Frontend Logic
    ══════════════════════════════════════════════════ */
 
 const API = '';
@@ -419,9 +419,38 @@ function esc(str) {
 
 // ── Boot ─────────────────────────────────────────
 
+async function triggerLogin() {
+  const btn = document.querySelector('.login-trigger-btn');
+  if (btn) {
+    btn.textContent = 'Connecting...';
+    btn.disabled = true;
+  }
+  try {
+    const res = await fetch('/api/login', { method: 'POST' });
+    const data = await res.json();
+    if (data.success) {
+      location.reload();
+    } else {
+      if (btn) btn.textContent = 'Retry Connection';
+      if (btn) btn.disabled = false;
+      alert('Connection failed: ' + (data.error || 'Unknown error'));
+    }
+  } catch (e) {
+    if (btn) btn.textContent = 'Retry Connection';
+    if (btn) btn.disabled = false;
+    alert('Connection error: ' + e.message);
+  }
+}
+
 async function boot() {
-  // Check connection
-  const status = await api('/api/status');
+  // Check if authenticated
+  const authCheck = await fetch('/api/status');
+  if (authCheck.status === 401) {
+    window.location.href = '/login';
+    return;
+  }
+
+  const status = await authCheck.json();
 
   if (!status?.connected) {
     switchView('setup');

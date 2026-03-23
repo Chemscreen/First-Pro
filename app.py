@@ -1,18 +1,21 @@
 """
-Drexel Autopilot — Backend
-===========================
+SchuBase Auto Pilot — Backend
+==============================
 Flask server that bridges Blackboard Ultra APIs
 and serves the dashboard frontend.
 
 Auto-logs into Blackboard via Playwright when needed.
+Protected by password authentication.
 """
 
 import os
 import json
+import secrets
 import threading
 from datetime import datetime, timedelta
+from functools import wraps
 
-from flask import Flask, jsonify, send_from_directory, request
+from flask import Flask, jsonify, send_from_directory, request, redirect, session, make_response
 import requests as http
 
 try:
@@ -22,6 +25,52 @@ except ImportError:
     pass
 
 app = Flask(__name__, static_folder="static")
+app.secret_key = os.getenv("SECRET_KEY", secrets.token_hex(32))
+
+# Access password — set this in your environment variables
+ACCESS_PASSWORD = os.getenv("SCHUBASE_PASSWORD", "")
+
+# ── Auth ─────────────────────────────────────────────────────────
+
+def require_auth(f):
+    """Decorator to require authentication for routes."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not ACCESS_PASSWORD:
+            # No password set, allow access (dev mode)
+            return f(*args, **kwargs)
+        if session.get("authenticated"):
+            return f(*args, **kwargs)
+        # For API routes, return 401
+        if request.path.startswith("/api/"):
+            return jsonify({"error": "Unauthorized"}), 401
+        return redirect("/login")
+    return decorated
+
+
+@app.route("/login")
+def login_page():
+    if session.get("authenticated") or not ACCESS_PASSWORD:
+        return redirect("/")
+    return send_from_directory("static", "login.html")
+
+
+@app.route("/auth/login", methods=["POST"])
+def auth_login():
+    password = request.form.get("password", "")
+    if password == ACCESS_PASSWORD:
+        session["authenticated"] = True
+        session.permanent = True
+        app.permanent_session_lifetime = timedelta(days=30)
+        return redirect("/")
+    return redirect("/login?error=1")
+
+
+@app.route("/auth/logout")
+def auth_logout():
+    session.clear()
+    return redirect("/login")
+
 
 # ── Blackboard Session ────────────────────────────────────────────
 
@@ -40,8 +89,8 @@ def get_bb_session() -> http.Session:
         if _bb_session:
             return _bb_session
 
-        session = http.Session()
-        session.headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0"
+        session_obj = http.Session()
+        session_obj.headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0"
 
         # Try saved session first
         from drexel_login import load_session, get_cookie_string, test_session
@@ -53,40 +102,40 @@ def get_bb_session() -> http.Session:
                 pair = pair.strip()
                 if "=" in pair:
                     name, value = pair.split("=", 1)
-                    session.cookies.set(name.strip(), value.strip())
+                    session_obj.cookies.set(name.strip(), value.strip())
 
             # Quick validity check
-            resp = session.get(f"{BB_API}/users/me", timeout=10)
+            resp = session_obj.get(f"{BB_API}/users/me", timeout=10)
             if resp.ok:
-                _bb_session = session
-                return session
+                _bb_session = session_obj
+                return session_obj
 
         # Need fresh login
         print("  Logging into Blackboard...")
         cookie_str = get_cookie_string()
-        session = http.Session()
-        session.headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0"
+        session_obj = http.Session()
+        session_obj.headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0"
         for pair in cookie_str.split(";"):
             pair = pair.strip()
             if "=" in pair:
                 name, value = pair.split("=", 1)
-                session.cookies.set(name.strip(), value.strip())
+                session_obj.cookies.set(name.strip(), value.strip())
 
-        _bb_session = session
-        return session
+        _bb_session = session_obj
+        return session_obj
 
 
 def bb_get(path, params=None):
     """Make a GET request to Blackboard API."""
     try:
-        session = get_bb_session()
-        resp = session.get(f"{BB_API}{path}", params=params or {}, timeout=15)
+        session_obj = get_bb_session()
+        resp = session_obj.get(f"{BB_API}{path}", params=params or {}, timeout=15)
         if resp.status_code == 401:
             # Session expired, force re-login
             global _bb_session
             _bb_session = None
-            session = get_bb_session()
-            resp = session.get(f"{BB_API}{path}", params=params or {}, timeout=15)
+            session_obj = get_bb_session()
+            resp = session_obj.get(f"{BB_API}{path}", params=params or {}, timeout=15)
         if resp.ok:
             return resp.json()
     except Exception as e:
@@ -97,6 +146,7 @@ def bb_get(path, params=None):
 # ── API Routes ────────────────────────────────────────────────────
 
 @app.route("/api/status")
+@require_auth
 def api_status():
     user = bb_get("/users/me")
     if user:
@@ -115,8 +165,8 @@ def api_status():
 
 
 @app.route("/api/courses")
+@require_auth
 def api_courses():
-    # Get user's course memberships
     user = bb_get("/users/me")
     if not user:
         return jsonify([])
@@ -134,25 +184,20 @@ def api_courses():
         if not course_id:
             continue
 
-        # Get course details
         course = bb_get(f"/courses/{course_id}")
         if not course:
             continue
 
-        # Skip unavailable courses
         if course.get("availability", {}).get("available") == "No":
             continue
 
-        # Get grade columns for this course
         grade_info = {}
         columns = bb_get(f"/courses/{course_id}/gradebook/columns", {
             "limit": 100,
         })
         if columns and columns.get("results"):
-            # Look for the final/total grade column
             for col in columns["results"]:
                 if col.get("name", "").lower() in ("final grade", "total", "weighted total", "final"):
-                    # Get the user's grade for this column
                     grade_data = bb_get(f"/courses/{course_id}/gradebook/columns/{col['id']}/users/{user_id}")
                     if grade_data:
                         grade_info = {
@@ -174,6 +219,7 @@ def api_courses():
 
 
 @app.route("/api/courses/<course_id>")
+@require_auth
 def api_course_detail(course_id):
     course = bb_get(f"/courses/{course_id}")
     if not course:
@@ -182,11 +228,9 @@ def api_course_detail(course_id):
     user = bb_get("/users/me")
     user_id = user.get("id", "") if user else ""
 
-    # Contents (files, links, assignments)
     contents = bb_get(f"/courses/{course_id}/contents", {"limit": 200})
     content_items = contents.get("results", []) if contents else []
 
-    # Grade columns (assignments)
     columns = bb_get(f"/courses/{course_id}/gradebook/columns", {"limit": 100})
     grade_columns = columns.get("results", []) if columns else []
 
@@ -196,7 +240,6 @@ def api_course_detail(course_id):
     for col in grade_columns:
         col_name = col.get("name", "")
 
-        # Check for final grade
         if col_name.lower() in ("final grade", "total", "weighted total", "final"):
             if user_id:
                 gd = bb_get(f"/courses/{course_id}/gradebook/columns/{col['id']}/users/{user_id}")
@@ -207,7 +250,6 @@ def api_course_detail(course_id):
                     }
             continue
 
-        # Regular assignment column
         due = col.get("due", "")
         submitted = False
         score = None
@@ -228,7 +270,6 @@ def api_course_detail(course_id):
             "url": f"{BB_URL}/ultra/courses/{course_id}/cl/outline",
         })
 
-    # Build modules from content tree
     modules = []
     for item in content_items:
         if item.get("hasChildren"):
@@ -242,7 +283,6 @@ def api_course_detail(course_id):
                 ],
             })
 
-    # Announcements
     announcements_data = bb_get(f"/courses/{course_id}/announcements", {"limit": 5})
     announcements = []
     if announcements_data and announcements_data.get("results"):
@@ -266,6 +306,7 @@ def api_course_detail(course_id):
 
 
 @app.route("/api/assignments/upcoming")
+@require_auth
 def api_upcoming():
     user = bb_get("/users/me")
     if not user:
@@ -327,6 +368,7 @@ def api_upcoming():
 
 
 @app.route("/api/grades")
+@require_auth
 def api_grades():
     user = bb_get("/users/me")
     if not user:
@@ -371,8 +413,9 @@ def api_grades():
 
 
 @app.route("/api/login", methods=["POST"])
-def api_login():
-    """Trigger login from the frontend."""
+@require_auth
+def api_bb_login():
+    """Trigger Blackboard login from the frontend."""
     global _bb_session
     _bb_session = None
 
@@ -387,35 +430,43 @@ def api_login():
 # ── Frontend Serving ──────────────────────────────────────────────
 
 @app.route("/")
+@require_auth
 def index():
     return send_from_directory("static", "index.html")
 
 
 @app.route("/<path:path>")
 def static_files(path):
-    return send_from_directory("static", path)
+    # Allow CSS/JS/fonts without auth (needed for login page)
+    if path.endswith((".css", ".js", ".woff2", ".woff", ".ttf", ".png", ".ico", ".svg")):
+        return send_from_directory("static", path)
+    # Login page is public
+    if path == "login" or path == "login.html":
+        return send_from_directory("static", "login.html")
+    # Everything else requires auth
+    @require_auth
+    def serve():
+        return send_from_directory("static", path)
+    return serve()
 
 
 if __name__ == "__main__":
+    port = int(os.getenv("PORT", 5000))
     print()
     print("  ╔═══════════════════════════════════╗")
-    print("  ║       Drexel Autopilot            ║")
-    print("  ║       http://localhost:5000        ║")
+    print("  ║       SchuBase Auto Pilot         ║")
+    print(f"  ║       http://localhost:{port}        ║")
     print("  ╚═══════════════════════════════════╝")
     print()
 
-    # Pre-login at startup
+    if ACCESS_PASSWORD:
+        print(f"  Auth: password protected")
+    else:
+        print("  Auth: OPEN (set SCHUBASE_PASSWORD to enable)")
+
     username = os.getenv("DREXEL_USERNAME", "")
     if username:
-        print(f"  Auto-login enabled for: {username}")
-        try:
-            get_bb_session()
-            print("  Connected to Blackboard!")
-        except Exception as e:
-            print(f"  Login will happen on first request: {e}")
-    else:
-        print("  Set DREXEL_USERNAME and DREXEL_PASSWORD in .env")
-        print("  to enable auto-login")
-
+        print(f"  Drexel user: {username}")
     print()
-    app.run(debug=True, port=5000)
+
+    app.run(debug=False, host="0.0.0.0", port=port)
