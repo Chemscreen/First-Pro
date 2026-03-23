@@ -3,7 +3,7 @@ services:
     name: schubase
     runtime: docker
     plan: free
-    repo: https://github.com/ByteSizeData/-First-Pro
+    repo: https://github.com/ByteSizeData/First-Pro
     branch: master
     healthCheckPath: /login
     envVars:
