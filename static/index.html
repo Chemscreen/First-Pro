@@ -123,29 +123,31 @@
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
           </svg>
         </div>
-        <h1>Connect to Canvas</h1>
-        <p class="setup-sub">Generate an access token to get started. It takes 30 seconds.</p>
+        <h1>Connect to Blackboard</h1>
+        <p class="setup-sub">Add your Drexel credentials so the app can auto-login for you.</p>
         <div class="setup-steps">
           <div class="step">
             <span class="step-num">1</span>
-            <span>Go to <a href="https://drexel.instructure.com/profile/settings" target="_blank">Canvas Settings</a></span>
+            <span>Open the <code>.env</code> file in this project folder</span>
           </div>
           <div class="step">
             <span class="step-num">2</span>
-            <span>Scroll to <strong>Approved Integrations</strong></span>
+            <span>Set <code>DREXEL_USERNAME</code> to your Drexel ID <em>(e.g. abc123)</em></span>
           </div>
           <div class="step">
             <span class="step-num">3</span>
-            <span>Click <strong>+ New Access Token</strong></span>
+            <span>Set <code>DREXEL_PASSWORD</code> to your Drexel password</span>
           </div>
           <div class="step">
             <span class="step-num">4</span>
-            <span>Copy the token into your <code>.env</code> file</span>
+            <span>Restart the server — it auto-logs in via Drexel Connect</span>
           </div>
-          <div class="step">
-            <span class="step-num">5</span>
-            <span>Restart the server</span>
-          </div>
+        </div>
+        <div class="setup-note">
+          <p style="font-size:13px;color:var(--text-tertiary);margin-top:20px;line-height:1.6">
+            Your credentials are only sent to Drexel's own login servers (connect.drexel.edu).<br>
+            They never leave your machine or get shared with anyone.
+          </p>
         </div>
       </div>
     </section>

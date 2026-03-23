@@ -1,5 +1,6 @@
 # Secrets - NEVER commit these
 .env
+.bb_session.json
 *.credentials
 *.token
 
