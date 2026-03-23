@@ -3,6 +3,9 @@ services:
     name: schubase
     runtime: docker
     plan: free
+    repo: https://github.com/Chemscreen/First-Pro
+    branch: main
+    healthCheckPath: /login
     envVars:
       - key: DREXEL_USERNAME
         sync: false
@@ -16,3 +19,5 @@ services:
         sync: false
       - key: SECRET_KEY
         generateValue: true
+      - key: PORT
+        value: 10000
