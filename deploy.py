@@ -23,7 +23,7 @@ import time
 import json
 
 # ── Config ─────────────────────────────────────────
-REPO_URL = "https://github.com/ByteSizeData/First-Pro"
+REPO_URL = "https://github.com/Chemscreen/First-Pro"
 SERVICE_NAME = "schubase"
 BRANCH = "claude/auto-research-blackboard-e38bX"
 
