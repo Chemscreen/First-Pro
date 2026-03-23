@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libasound2 libwayland-client0 \
     libx11-xcb1 libxcb1 libxext6 libx11-6 \
     xvfb fonts-liberation \
+    dbus \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -29,9 +30,15 @@ COPY . .
 # Render uses PORT env var
 ENV PORT=10000
 ENV DISPLAY=:99
+# Reduce Chromium memory usage
+ENV PLAYWRIGHT_CHROMIUM_SANDBOX=0
 
 EXPOSE 10000
 
-# Start xvfb + gunicorn
-CMD Xvfb :99 -screen 0 1280x720x24 -nolisten tcp & \
-    gunicorn --bind 0.0.0.0:${PORT} --timeout 120 --workers 1 --threads 4 app:app
+# Create swap space for Chromium on low-memory hosts, start xvfb + gunicorn
+# --timeout 300 so login requests don't get killed during MFA wait
+CMD fallocate -l 256M /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile; \
+    dbus-daemon --system --nofork & \
+    Xvfb :99 -screen 0 1280x720x16 -nolisten tcp -ac & \
+    sleep 1 && \
+    gunicorn --bind 0.0.0.0:${PORT} --timeout 300 --workers 1 --threads 2 app:app

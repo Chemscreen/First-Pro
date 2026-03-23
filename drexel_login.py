@@ -1,17 +1,14 @@
 """
-Drexel Blackboard Auto-Login (browser-use)
-============================================
-Uses browser-use (AI-powered browser automation) to log into
-Drexel's Blackboard via Drexel Connect SSO, then extracts
-session cookies for API access.
+Drexel Blackboard Auto-Login
+==============================
+Uses Playwright to log into Drexel's Blackboard via
+Drexel Connect SSO, then extracts session cookies for API access.
 
-Requirements:
-  pip install browser-use langchain-google-genai
+Optimized for low-memory environments (Render free tier, Docker).
 
 Set in .env:
   DREXEL_USERNAME=as6436@drexel.edu
   DREXEL_PASSWORD=your_password
-  GOOGLE_API_KEY=AIza...  (for the AI agent)
 """
 
 import asyncio
@@ -29,161 +26,169 @@ except ImportError:
 BB_URL = "https://learn.dcollege.net"
 SESSION_FILE = Path(__file__).parent / ".bb_session.json"
 
+# Chromium flags for low-memory containerized environments
+CHROMIUM_ARGS = [
+    "--no-sandbox",
+    "--disable-setuid-sandbox",
+    "--disable-dev-shm-usage",
+    "--disable-gpu",
+    "--disable-software-rasterizer",
+    "--disable-extensions",
+    "--disable-background-networking",
+    "--disable-default-apps",
+    "--disable-sync",
+    "--disable-translate",
+    "--no-first-run",
+    "--no-zygote",
+    "--single-process",
+    "--mute-audio",
+    "--disable-background-timer-throttling",
+    "--disable-renderer-backgrounding",
+    "--disable-backgrounding-occluded-windows",
+    "--js-flags=--max-old-space-size=256",
+]
 
-async def login_with_browser_use(username: str, password: str) -> dict:
+
+async def login_with_playwright(username: str, password: str) -> dict:
     """
-    Use browser-use AI agent to log into Drexel Blackboard.
-    The AI agent navigates the SSO flow automatically.
-    Returns a dict of cookies.
-    """
-    from browser_use import Agent, Browser, BrowserConfig
-    from langchain_google_genai import ChatGoogleGenerativeAI
-
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
-        temperature=0,
-    )
-
-    browser = Browser(config=BrowserConfig(
-        headless=True,
-    ))
-
-    task = f"""
-    Go to {BB_URL} and log in with these Drexel credentials:
-    - Username/Email: {username}
-    - Password: {password}
-
-    Steps:
-    1. Navigate to {BB_URL}
-    2. You will be redirected to a Microsoft/Drexel Connect SSO login page
-    3. Enter the email/username in the email field and click Next/Submit
-    4. Enter the password in the password field and click Sign In/Submit
-    5. If asked "Stay signed in?" click No
-    6. Wait for the page to redirect back to Blackboard (the URL should contain learn.dcollege.net/ultra)
-    7. Once you see the Blackboard dashboard, the login is complete
-
-    IMPORTANT: Do NOT click any other links or navigate away. Just log in and stop.
-    If you see an MFA/2FA prompt, just wait — the user will approve it on their phone.
-    """
-
-    agent = Agent(
-        task=task,
-        llm=llm,
-        browser=browser,
-    )
-
-    print("  AI agent starting login flow...")
-    await agent.run(max_steps=15)
-
-    # Extract cookies from the browser context
-    context = await browser.get_current_context()
-    pages = context.pages
-    cookies_list = await context.cookies()
-
-    await browser.close()
-
-    # Filter for Blackboard cookies
-    cookie_dict = {}
-    for c in cookies_list:
-        domain = c.get("domain", "")
-        if "dcollege.net" in domain or "blackboard" in domain:
-            cookie_dict[c["name"]] = c["value"]
-
-    if not cookie_dict:
-        raise Exception("No Blackboard cookies found after login")
-
-    print(f"  Got {len(cookie_dict)} cookies from Blackboard")
-    return cookie_dict
-
-
-async def login_with_playwright_direct(username: str, password: str) -> dict:
-    """
-    Fallback: Direct Playwright login without AI agent.
-    Handles Microsoft SSO flow step-by-step.
+    Playwright login handling Microsoft SSO flow step-by-step.
+    Optimized for low-memory Docker/Render environments.
     """
     from playwright.async_api import async_playwright
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        context = await browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0"
+        browser = await p.chromium.launch(
+            headless=True,
+            args=CHROMIUM_ARGS,
         )
+        context = await browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            viewport={"width": 1280, "height": 720},
+        )
+        # Longer default timeout for slow SSO redirects
+        context.set_default_timeout(90000)
         page = await context.new_page()
 
-        print("  Opening Blackboard...")
-        await page.goto(BB_URL, wait_until="domcontentloaded", timeout=60000)
-        await page.wait_for_timeout(3000)
-
-        url = page.url.lower()
-        print(f"  Landed on: {url[:80]}")
-
-        # Microsoft SSO flow
-        if "microsoftonline" in url or "login.microsoft" in url or "login.live" in url:
-            print("  Microsoft SSO detected, entering credentials...")
-
-            # Email
-            try:
-                email_field = page.locator('input[type="email"], input[name="loginfmt"]')
-                await email_field.fill(username)
-                await page.locator('input[type="submit"]').click()
-                await page.wait_for_timeout(3000)
-            except Exception as e:
-                print(f"  Email step: {e}")
-
-            # Password
-            try:
-                pwd_field = page.locator('input[type="password"], input[name="passwd"]')
-                await pwd_field.fill(password)
-                await page.locator('input[type="submit"]').click()
-                await page.wait_for_timeout(3000)
-            except Exception as e:
-                print(f"  Password step: {e}")
-
-            # Stay signed in? No
-            try:
-                no_btn = page.locator('input[value="No"], button:has-text("No")')
-                await no_btn.click(timeout=5000)
-                await page.wait_for_timeout(2000)
-            except Exception:
-                pass
-
-        # Check for MFA
-        page_content = await page.content()
-        mfa_words = ["multi-factor", "mfa", "verify", "authenticator", "approve"]
-        if any(w in page_content.lower() for w in mfa_words):
-            print()
-            print("  ╔══════════════════════════════════════════╗")
-            print("  ║  MFA Required — check your phone/app    ║")
-            print("  ║  Approve the login, then wait...        ║")
-            print("  ╚══════════════════════════════════════════╝")
-            print()
-            for _ in range(60):
-                await page.wait_for_timeout(1000)
-                if "learn.dcollege.net" in page.url:
-                    break
-
-        # Wait for Blackboard
         try:
-            await page.wait_for_url("**/ultra/**", timeout=30000)
-        except Exception:
-            await page.goto(BB_URL, wait_until="domcontentloaded", timeout=30000)
-            await page.wait_for_timeout(3000)
+            print("  Opening Blackboard...")
+            await page.goto(BB_URL, wait_until="domcontentloaded", timeout=90000)
+            await page.wait_for_timeout(5000)
 
-        # Extract cookies
-        cookies_list = await context.cookies()
-        await browser.close()
+            url = page.url.lower()
+            print(f"  Landed on: {url[:100]}")
 
-        cookie_dict = {}
-        for c in cookies_list:
-            domain = c.get("domain", "")
-            if "dcollege.net" in domain or "blackboard" in domain:
-                cookie_dict[c["name"]] = c["value"]
+            # Microsoft SSO flow
+            if "microsoftonline" in url or "login.microsoft" in url or "login.live" in url:
+                print("  Microsoft SSO detected, entering credentials...")
 
-        if not cookie_dict:
-            raise Exception("No Blackboard cookies found after login")
+                # Step 1: Email
+                try:
+                    email_field = page.locator('input[type="email"], input[name="loginfmt"]')
+                    await email_field.wait_for(state="visible", timeout=15000)
+                    await email_field.fill(username)
+                    await page.wait_for_timeout(500)
+                    submit = page.locator('input[type="submit"], button[type="submit"]')
+                    await submit.click()
+                    print("  Email submitted, waiting for password page...")
+                    await page.wait_for_timeout(5000)
+                except Exception as e:
+                    print(f"  Email step issue: {e}")
 
-        print(f"  Got {len(cookie_dict)} cookies")
-        return cookie_dict
+                # Step 2: Password — might redirect to Drexel's own IdP
+                try:
+                    url_now = page.url.lower()
+                    print(f"  Now on: {url_now[:100]}")
+
+                    pwd_field = page.locator('input[type="password"], input[name="passwd"], input[name="password"]')
+                    await pwd_field.wait_for(state="visible", timeout=20000)
+                    await pwd_field.fill(password)
+                    await page.wait_for_timeout(500)
+
+                    # Click submit/sign-in button
+                    submit = page.locator('input[type="submit"], button[type="submit"], button:has-text("Sign in"), button:has-text("Log in")')
+                    await submit.first.click()
+                    print("  Password submitted, waiting...")
+                    await page.wait_for_timeout(5000)
+                except Exception as e:
+                    print(f"  Password step issue: {e}")
+
+                # Step 3: "Stay signed in?" — click No
+                try:
+                    no_btn = page.locator('input[value="No"], button:has-text("No")')
+                    await no_btn.click(timeout=8000)
+                    print("  Clicked 'No' on stay signed in prompt")
+                    await page.wait_for_timeout(3000)
+                except Exception:
+                    # May not appear, that's fine
+                    pass
+
+            # Check for MFA
+            page_content = await page.content()
+            page_url = page.url.lower()
+            mfa_words = ["multi-factor", "mfa", "verify your identity", "authenticator",
+                         "approve", "additional security", "two-factor", "2fa",
+                         "strongauth", "kmsi"]
+            if any(w in page_content.lower() or w in page_url for w in mfa_words):
+                print()
+                print("  ****************************************************")
+                print("  *  MFA REQUIRED — Check your phone / Authenticator  *")
+                print("  *  Approve the sign-in request, then wait...        *")
+                print("  ****************************************************")
+                print()
+
+                # Wait up to 120 seconds for MFA approval
+                for i in range(120):
+                    await page.wait_for_timeout(1000)
+                    current_url = page.url
+                    if "learn.dcollege.net" in current_url:
+                        print("  MFA approved! Redirected to Blackboard.")
+                        break
+                    if i % 10 == 0 and i > 0:
+                        print(f"  Still waiting for MFA... ({i}s)")
+
+                # After MFA, might get "Stay signed in?" again
+                try:
+                    no_btn = page.locator('input[value="No"], button:has-text("No")')
+                    await no_btn.click(timeout=5000)
+                    await page.wait_for_timeout(3000)
+                except Exception:
+                    pass
+
+            # Wait for Blackboard to load
+            current = page.url
+            if "learn.dcollege.net" not in current:
+                print(f"  Not on Blackboard yet ({current[:80]}), waiting...")
+                try:
+                    await page.wait_for_url("**learn.dcollege.net**", timeout=60000)
+                except Exception:
+                    # Try navigating directly
+                    print("  Direct navigation to Blackboard...")
+                    await page.goto(BB_URL, wait_until="domcontentloaded", timeout=60000)
+                    await page.wait_for_timeout(5000)
+
+            final_url = page.url
+            print(f"  Final URL: {final_url[:100]}")
+
+            # Extract cookies
+            cookies_list = await context.cookies()
+
+            cookie_dict = {}
+            for c in cookies_list:
+                domain = c.get("domain", "")
+                if "dcollege.net" in domain or "blackboard" in domain:
+                    cookie_dict[c["name"]] = c["value"]
+
+            if not cookie_dict:
+                # Grab ALL cookies as fallback — some setups use different domains
+                print(f"  No dcollege.net cookies found, grabbing all {len(cookies_list)} cookies...")
+                for c in cookies_list:
+                    cookie_dict[c["name"]] = c["value"]
+
+            print(f"  Got {len(cookie_dict)} cookies from browser")
+            return cookie_dict
+
+        finally:
+            await browser.close()
 
 
 def save_session(cookies: dict):
@@ -206,6 +211,7 @@ def load_session() -> dict | None:
         age = time.time() - data.get("timestamp", 0)
         if age > 7200:  # 2 hours
             print("  Saved session expired, need fresh login")
+            SESSION_FILE.unlink(missing_ok=True)
             return None
         return data
     except Exception:
@@ -230,20 +236,12 @@ def get_cookie_string() -> str:
             "  DREXEL_PASSWORD=your_password"
         )
 
-    # Try browser-use first (AI-powered), fall back to direct Playwright
-    api_key = os.getenv("GOOGLE_API_KEY", "")
+    print("  Launching Playwright for Blackboard login...")
+    cookies = asyncio.run(login_with_playwright(username, password))
 
-    if api_key:
-        print("  Using browser-use AI agent (Gemini Flash) for login...")
-        try:
-            cookies = asyncio.run(login_with_browser_use(username, password))
-            save_session(cookies)
-            return "; ".join(f"{k}={v}" for k, v in cookies.items())
-        except Exception as e:
-            print(f"  browser-use failed ({e}), trying direct Playwright...")
+    if not cookies:
+        raise Exception("Login completed but no cookies were captured")
 
-    print("  Using direct Playwright for login...")
-    cookies = asyncio.run(login_with_playwright_direct(username, password))
     save_session(cookies)
     return "; ".join(f"{k}={v}" for k, v in cookies.items())
 
@@ -252,14 +250,18 @@ def test_session(cookie_string: str) -> bool:
     """Test if a cookie string is still valid."""
     import requests
     session = requests.Session()
+    session.headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0"
     for pair in cookie_string.split(";"):
         pair = pair.strip()
         if "=" in pair:
             name, value = pair.split("=", 1)
             session.cookies.set(name.strip(), value.strip())
 
-    resp = session.get(f"{BB_URL}/learn/api/public/v1/users/me", timeout=10)
-    return resp.ok
+    try:
+        resp = session.get(f"{BB_URL}/learn/api/public/v1/users/me", timeout=15)
+        return resp.ok
+    except Exception:
+        return False
 
 
 if __name__ == "__main__":

@@ -412,19 +412,56 @@ def api_grades():
     return jsonify(grades)
 
 
+_login_status = {"running": False, "success": None, "error": None}
+
+
 @app.route("/api/login", methods=["POST"])
 @require_auth
 def api_bb_login():
-    """Trigger Blackboard login from the frontend."""
+    """Trigger Blackboard login in background thread."""
     global _bb_session
-    _bb_session = None
 
-    try:
-        from drexel_login import get_cookie_string
-        cookie_str = get_cookie_string()
+    if _login_status["running"]:
+        return jsonify({"success": False, "error": "Login already in progress", "status": "running"})
+
+    _bb_session = None
+    _login_status["running"] = True
+    _login_status["success"] = None
+    _login_status["error"] = None
+
+    def do_login():
+        try:
+            from drexel_login import get_cookie_string
+            cookie_str = get_cookie_string()
+            _login_status["success"] = True
+            _login_status["error"] = None
+            print("  Background login completed successfully!")
+        except Exception as e:
+            _login_status["success"] = False
+            _login_status["error"] = str(e)
+            print(f"  Background login failed: {e}")
+        finally:
+            _login_status["running"] = False
+
+    t = threading.Thread(target=do_login, daemon=True)
+    t.start()
+
+    # Wait up to 180s for it to finish (MFA can take time)
+    t.join(timeout=180)
+
+    if _login_status["running"]:
+        return jsonify({"success": False, "error": "Login timed out — MFA may not have been approved", "status": "timeout"})
+
+    if _login_status["success"]:
         return jsonify({"success": True})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+    return jsonify({"success": False, "error": _login_status["error"] or "Unknown error"}), 500
+
+
+@app.route("/api/login/status")
+@require_auth
+def api_login_status():
+    """Check login progress."""
+    return jsonify(_login_status)
 
 
 # ── Frontend Serving ──────────────────────────────────────────────

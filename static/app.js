@@ -421,24 +421,30 @@ function esc(str) {
 
 async function triggerLogin() {
   const btn = document.querySelector('.login-trigger-btn');
+  const note = document.querySelector('.setup-note');
   if (btn) {
     btn.textContent = 'Connecting...';
     btn.disabled = true;
+  }
+  if (note) {
+    note.innerHTML = '<p style="font-size:14px;color:var(--orange);margin-top:20px;line-height:1.6;font-weight:500">Logging into Blackboard via Drexel SSO...<br>This can take up to 3 minutes.<br><strong>Check your phone for MFA approval if prompted.</strong></p>';
   }
   try {
     const res = await fetch('/api/login', { method: 'POST' });
     const data = await res.json();
     if (data.success) {
-      location.reload();
+      if (note) note.innerHTML = '<p style="font-size:14px;color:var(--green);margin-top:20px;font-weight:600">Connected! Loading your courses...</p>';
+      setTimeout(() => location.reload(), 1000);
     } else {
       if (btn) btn.textContent = 'Retry Connection';
       if (btn) btn.disabled = false;
-      alert('Connection failed: ' + (data.error || 'Unknown error'));
+      const errMsg = data.error || 'Unknown error';
+      if (note) note.innerHTML = `<p style="font-size:14px;color:var(--red);margin-top:20px;line-height:1.6">${esc(errMsg)}<br>Click Retry to try again.</p>`;
     }
   } catch (e) {
     if (btn) btn.textContent = 'Retry Connection';
     if (btn) btn.disabled = false;
-    alert('Connection error: ' + e.message);
+    if (note) note.innerHTML = `<p style="font-size:14px;color:var(--red);margin-top:20px;line-height:1.6">Connection error: ${esc(e.message)}<br>The server may still be starting up. Try again in a moment.</p>`;
   }
 }
 
