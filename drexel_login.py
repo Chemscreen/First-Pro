@@ -6,12 +6,12 @@ Drexel's Blackboard via Drexel Connect SSO, then extracts
 session cookies for API access.
 
 Requirements:
-  pip install browser-use langchain-anthropic
+  pip install browser-use langchain-google-genai
 
 Set in .env:
   DREXEL_USERNAME=as6436@drexel.edu
   DREXEL_PASSWORD=your_password
-  ANTHROPIC_API_KEY=sk-...  (for the AI agent)
+  GOOGLE_API_KEY=AIza...  (for the AI agent)
 """
 
 import asyncio
@@ -37,10 +37,10 @@ async def login_with_browser_use(username: str, password: str) -> dict:
     Returns a dict of cookies.
     """
     from browser_use import Agent, Browser, BrowserConfig
-    from langchain_anthropic import ChatAnthropic
+    from langchain_google_genai import ChatGoogleGenerativeAI
 
-    llm = ChatAnthropic(
-        model_name="claude-sonnet-4-20250514",
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash",
         temperature=0,
     )
 
@@ -231,10 +231,10 @@ def get_cookie_string() -> str:
         )
 
     # Try browser-use first (AI-powered), fall back to direct Playwright
-    api_key = os.getenv("ANTHROPIC_API_KEY", "")
+    api_key = os.getenv("GOOGLE_API_KEY", "")
 
     if api_key:
-        print("  Using browser-use AI agent for login...")
+        print("  Using browser-use AI agent (Gemini Flash) for login...")
         try:
             cookies = asyncio.run(login_with_browser_use(username, password))
             save_session(cookies)

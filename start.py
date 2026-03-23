@@ -37,9 +37,9 @@ def check_deps():
         missing.append("browser-use")
 
     try:
-        __import__("langchain_anthropic")
+        __import__("langchain_google_genai")
     except ImportError:
-        missing.append("langchain-anthropic")
+        missing.append("langchain-google-genai")
 
     if missing:
         print(f"  Installing: {', '.join(missing)}")
@@ -77,12 +77,13 @@ def check_env():
 
     print(f"  Drexel user: {username}")
 
-    api_key = os.getenv("ANTHROPIC_API_KEY", "")
-    if api_key and api_key.startswith("sk-"):
-        print("  browser-use AI agent: enabled")
+    api_key = os.getenv("GOOGLE_API_KEY", "")
+    if api_key and api_key.startswith("AIza"):
+        print("  browser-use AI agent: enabled (Gemini Flash)")
     else:
         print("  browser-use AI agent: disabled (will use direct Playwright)")
-        print("  Tip: Add ANTHROPIC_API_KEY to .env for smarter login handling")
+        print("  Tip: Add GOOGLE_API_KEY to .env for smarter login handling")
+        print("  Get one free at https://aistudio.google.com/apikey")
 
 
 def test_login():
