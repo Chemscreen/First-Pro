@@ -1,31 +1,33 @@
 /* ══════════════════════════════════════════════════
-   SchuBase Auto Pilot — Design System
+   SchuBase Auto Pilot — Dark Mode Design System
    ══════════════════════════════════════════════════ */
 
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+
 :root {
-  /* Drexel Navy + Gold, softened for modern feel */
-  --blue: #07294D;
+  /* Brand */
+  --blue: #6C63FF;
   --gold: #FFC600;
   --gold-soft: #FFD84D;
 
-  /* Neutrals */
-  --bg: #f5f5f7;
-  --surface: #ffffff;
-  --surface-hover: #fafafa;
-  --border: rgba(0, 0, 0, 0.06);
-  --border-strong: rgba(0, 0, 0, 0.12);
+  /* Dark Neutrals */
+  --bg: #0e0e12;
+  --surface: #1a1a23;
+  --surface-hover: #22222e;
+  --border: rgba(255, 255, 255, 0.06);
+  --border-strong: rgba(255, 255, 255, 0.12);
 
   /* Text */
-  --text-primary: #1d1d1f;
-  --text-secondary: #6e6e73;
-  --text-tertiary: #86868b;
+  --text-primary: #f0f0f2;
+  --text-secondary: #9a9aad;
+  --text-tertiary: #6b6b7b;
 
   /* Accents */
-  --accent: #07294D;
-  --accent-light: rgba(7, 41, 77, 0.08);
-  --green: #34c759;
-  --orange: #ff9500;
-  --red: #ff3b30;
+  --accent: #6C63FF;
+  --accent-light: rgba(108, 99, 255, 0.12);
+  --green: #34d399;
+  --orange: #fbbf24;
+  --red: #f87171;
 
   /* Spacing */
   --nav-height: 56px;
@@ -34,7 +36,7 @@
   --max-width: 1080px;
 
   /* Typography */
-  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 * {
@@ -74,7 +76,7 @@ a:hover {
   left: 0;
   right: 0;
   height: var(--nav-height);
-  background: rgba(255, 255, 255, 0.72);
+  background: rgba(14, 14, 18, 0.8);
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
   border-bottom: 1px solid var(--border);
@@ -100,12 +102,12 @@ a:hover {
 .nav-logo {
   width: 32px;
   height: 32px;
-  background: var(--blue);
+  background: var(--accent);
   border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--gold);
+  color: #fff;
 }
 
 .nav-title {
@@ -118,7 +120,7 @@ a:hover {
 .nav-links {
   display: flex;
   gap: 4px;
-  background: rgba(0, 0, 0, 0.04);
+  background: rgba(255, 255, 255, 0.05);
   border-radius: 10px;
   padding: 3px;
 }
@@ -143,7 +145,7 @@ a:hover {
 .nav-link.active {
   background: var(--surface);
   color: var(--text-primary);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 .nav-user {
@@ -226,7 +228,7 @@ a:hover {
 
 .stat-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
 }
 
 .stat-label {
@@ -335,12 +337,12 @@ a:hover {
 }
 
 .due-badge.urgent {
-  background: rgba(255, 59, 48, 0.1);
+  background: rgba(248, 113, 113, 0.12);
   color: var(--red);
 }
 
 .due-badge.soon {
-  background: rgba(255, 149, 0, 0.1);
+  background: rgba(251, 191, 36, 0.12);
   color: var(--orange);
 }
 
@@ -350,7 +352,7 @@ a:hover {
 }
 
 .due-badge.done {
-  background: rgba(52, 199, 89, 0.1);
+  background: rgba(52, 211, 153, 0.12);
   color: var(--green);
 }
 
@@ -425,14 +427,14 @@ a:hover {
   left: 0;
   right: 0;
   height: 4px;
-  background: var(--card-accent, var(--blue));
+  background: var(--card-accent, var(--accent));
   opacity: 0;
   transition: opacity 0.25s ease;
 }
 
 .course-card:hover {
   transform: translateY(-4px);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
   border-color: var(--border-strong);
 }
 
@@ -532,7 +534,7 @@ a:hover {
 .grade-bar-container {
   width: 120px;
   height: 6px;
-  background: rgba(0, 0, 0, 0.06);
+  background: rgba(255, 255, 255, 0.06);
   border-radius: 3px;
   overflow: hidden;
 }
@@ -544,7 +546,7 @@ a:hover {
 }
 
 .grade-bar.a { background: var(--green); }
-.grade-bar.b { background: #30d158; }
+.grade-bar.b { background: #34d399; }
 .grade-bar.c { background: var(--orange); }
 .grade-bar.d { background: var(--red); }
 
@@ -694,7 +696,7 @@ a:hover {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-tertiary);
-  background: rgba(0,0,0,0.04);
+  background: rgba(255, 255, 255, 0.05);
   padding: 2px 6px;
   border-radius: 4px;
 }
@@ -719,7 +721,7 @@ a:hover {
 .filter-pills {
   display: flex;
   gap: 4px;
-  background: rgba(0, 0, 0, 0.04);
+  background: rgba(255, 255, 255, 0.05);
   border-radius: 10px;
   padding: 3px;
 }
@@ -744,7 +746,7 @@ a:hover {
 .pill.active {
   background: var(--surface);
   color: var(--text-primary);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 /* ── Setup ───────────────────────────────────────── */
@@ -805,7 +807,7 @@ a:hover {
 }
 
 .step code {
-  background: rgba(0, 0, 0, 0.06);
+  background: rgba(255, 255, 255, 0.06);
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 13px;
@@ -834,7 +836,7 @@ a:hover {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, transparent, rgba(0,0,0,0.03), transparent);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.03), transparent);
   animation: shimmer 1.5s infinite;
 }
 
@@ -935,18 +937,18 @@ a:hover {
   max-width: 400px;
   width: 100%;
   text-align: center;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
 }
 
 .login-logo {
   width: 56px;
   height: 56px;
-  background: var(--blue);
+  background: var(--accent);
   border-radius: 14px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--gold);
+  color: #fff;
   margin-bottom: 20px;
 }
 
@@ -979,7 +981,11 @@ a:hover {
 
 .login-input:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(7, 41, 77, 0.1);
+  box-shadow: 0 0 0 3px rgba(108, 99, 255, 0.2);
+}
+
+.login-input::placeholder {
+  color: var(--text-tertiary);
 }
 
 .login-btn {
@@ -988,7 +994,7 @@ a:hover {
   font-size: 15px;
   font-weight: 600;
   font-family: var(--font);
-  background: var(--blue);
+  background: var(--accent);
   color: white;
   border: none;
   border-radius: var(--radius-sm);
@@ -998,9 +1004,9 @@ a:hover {
 }
 
 .login-btn:hover {
-  background: #0a3a6b;
+  background: #5b53e0;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(7, 41, 77, 0.3);
+  box-shadow: 0 4px 12px rgba(108, 99, 255, 0.4);
 }
 
 .login-error {
@@ -1017,7 +1023,7 @@ a:hover {
   font-size: 15px;
   font-weight: 600;
   font-family: var(--font);
-  background: var(--blue);
+  background: var(--accent);
   color: white;
   border: none;
   border-radius: var(--radius-sm);
@@ -1026,9 +1032,9 @@ a:hover {
 }
 
 .login-trigger-btn:hover {
-  background: #0a3a6b;
+  background: #5b53e0;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(7, 41, 77, 0.3);
+  box-shadow: 0 4px 12px rgba(108, 99, 255, 0.4);
 }
 
 .login-footer {
