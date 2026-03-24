@@ -130,14 +130,22 @@ def bb_get(path, params=None):
     try:
         session_obj = get_bb_session()
         resp = session_obj.get(f"{BB_API}{path}", params=params or {}, timeout=15)
+        print(f"  BB GET {path} => {resp.status_code}")
         if resp.status_code == 401:
             # Session expired, force re-login
             global _bb_session
             _bb_session = None
             session_obj = get_bb_session()
             resp = session_obj.get(f"{BB_API}{path}", params=params or {}, timeout=15)
+            print(f"  BB GET {path} (retry) => {resp.status_code}")
         if resp.ok:
-            return resp.json()
+            data = resp.json()
+            # Log result summary for debugging
+            if isinstance(data, dict) and "results" in data:
+                print(f"  BB GET {path} => {len(data['results'])} results")
+            return data
+        else:
+            print(f"  BB GET {path} => FAILED: {resp.text[:200]}")
     except Exception as e:
         print(f"  BB API error ({path}): {e}")
     return None
@@ -169,14 +177,18 @@ def api_status():
 def api_courses():
     user = bb_get("/users/me")
     if not user:
+        print("  /api/courses: user lookup failed")
         return jsonify([])
 
     user_id = user.get("id", "")
+    print(f"  /api/courses: user_id={user_id}")
     memberships = bb_get(f"/users/{user_id}/courses", {"limit": 100})
     if not memberships:
+        print("  /api/courses: memberships lookup failed")
         return jsonify([])
 
     results_list = memberships.get("results", [])
+    print(f"  /api/courses: {len(results_list)} memberships found")
     courses = []
 
     for m in results_list:
