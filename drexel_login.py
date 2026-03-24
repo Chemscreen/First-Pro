@@ -71,84 +71,71 @@ async def login_with_playwright(username: str, password: str) -> dict:
         page = await context.new_page()
 
         try:
-            # ── Step 1: Open Blackboard → triggers SAML2 redirect to Microsoft ──
-            print("  Opening Blackboard (triggers SAML2 SSO)...")
-            await page.goto(BB_URL, wait_until="domcontentloaded", timeout=90000)
-            await page.wait_for_timeout(5000)
+            # ── Step 1: Go to Drexel Connect and click "SIGN IN" ──
+            print("  Opening Drexel Connect...")
+            await page.goto(DREXEL_CONNECT, wait_until="domcontentloaded", timeout=90000)
+            await page.wait_for_timeout(3000)
 
             url = page.url.lower()
-            print(f"  Redirected to: {url[:120]}")
+            print(f"  Landed on: {url[:120]}")
 
-            # ── Step 2: Handle Microsoft Azure AD SAML login ──
+            # Click the yellow "SIGN IN" button on Drexel Connect
+            try:
+                sign_in_link = page.locator('a:has-text("Sign In"), a:has-text("SIGN IN"), button:has-text("Sign In")')
+                await sign_in_link.first.click(timeout=10000)
+                print("  Clicked 'SIGN IN' on Drexel Connect...")
+                await page.wait_for_timeout(5000)
+            except Exception as e:
+                print(f"  No Sign In button found ({e}), may already be on SSO...")
+
+            url = page.url.lower()
+            print(f"  Now on: {url[:120]}")
+
+            # ── Step 2: Microsoft login (email → password) ──
             if "microsoftonline" in url or "login.microsoft" in url or "login.live" in url:
-                print("  Microsoft SAML2 login detected...")
+                print("  Microsoft SSO page detected...")
 
-                # Email / username field
+                # Enter email
                 try:
                     email_field = page.locator('input[type="email"], input[name="loginfmt"]')
                     await email_field.wait_for(state="visible", timeout=15000)
                     await email_field.fill(username)
                     await page.wait_for_timeout(1000)
 
-                    next_btn = page.locator('input[type="submit"][value="Next"], input#idSIButton9')
+                    next_btn = page.locator('input[type="submit"], input#idSIButton9')
                     await next_btn.first.click()
                     print(f"  Email submitted: {username}")
                     await page.wait_for_timeout(5000)
                 except Exception as e:
                     print(f"  Email step: {e}")
-                    # SAML may skip email if tenant is known, check if already on password
-                    pass
 
                 url_now = page.url.lower()
-                print(f"  Now on: {url_now[:120]}")
+                print(f"  After email: {url_now[:120]}")
 
-                # Drexel may redirect to their own IdP (e.g. idp.drexel.edu, connect.drexel.edu)
-                if "drexel" in url_now and "microsoftonline" not in url_now:
-                    print("  Redirected to Drexel IdP, entering credentials there...")
-                    try:
-                        user_field = page.locator('input[name="username"], input[name="UserName"], input[name="j_username"], input[type="text"]').first
-                        await user_field.wait_for(state="visible", timeout=15000)
-                        await user_field.fill(username)
+                # Enter password (on Microsoft or Drexel IdP)
+                try:
+                    pwd_field = page.locator('input[type="password"]')
+                    await pwd_field.wait_for(state="visible", timeout=20000)
+                    await pwd_field.fill(password)
+                    await page.wait_for_timeout(500)
 
-                        pwd_field = page.locator('input[type="password"], input[name="password"], input[name="Password"], input[name="j_password"]').first
-                        await pwd_field.fill(password)
-                        await page.wait_for_timeout(500)
-
-                        submit = page.locator('button[type="submit"], input[type="submit"], button:has-text("Sign in"), button:has-text("Log in"), button:has-text("Login")').first
-                        await submit.click()
-                        print("  Drexel IdP credentials submitted...")
-                        await page.wait_for_timeout(5000)
-                    except Exception as e:
-                        print(f"  Drexel IdP step: {e}")
-                else:
-                    # Still on Microsoft — enter password
-                    try:
-                        pwd_field = page.locator('input[type="password"], input[name="passwd"]')
-                        await pwd_field.wait_for(state="visible", timeout=20000)
-                        await pwd_field.fill(password)
-                        await page.wait_for_timeout(500)
-
-                        sign_in = page.locator('input[type="submit"][value="Sign in"], input#idSIButton9, button[type="submit"]')
-                        await sign_in.first.click()
-                        print("  Password submitted on Microsoft...")
-                        await page.wait_for_timeout(5000)
-                    except Exception as e:
-                        print(f"  Password step: {e}")
+                    submit = page.locator('input[type="submit"], input#idSIButton9, button[type="submit"]')
+                    await submit.first.click()
+                    print("  Password submitted...")
+                    await page.wait_for_timeout(5000)
+                except Exception as e:
+                    print(f"  Password step: {e}")
 
             # ── Step 3: Check for MFA ──
             page_content = await page.content()
             page_url = page.url.lower()
-            mfa_indicators = [
-                "multi-factor", "mfa", "verify your identity", "authenticator",
-                "approve", "additional security", "two-factor", "2fa",
-                "strongauth", "kmsi", "push notification",
-                "entercode", "verificationcode", "polling"
-            ]
-            needs_mfa = any(w in page_content.lower() or w in page_url for w in mfa_indicators)
-            # Also check if we're still on Microsoft (not yet on Blackboard)
-            if not needs_mfa and "microsoftonline" in page_url and "learn.dcollege" not in page_url:
-                needs_mfa = True
-                print("  Still on Microsoft after password — likely waiting for MFA...")
+
+            # MFA if still on Microsoft after password
+            needs_mfa = "microsoftonline" in page_url or "login.microsoft" in page_url
+            if not needs_mfa:
+                mfa_words = ["verify your identity", "authenticator", "approve",
+                             "additional security", "strongauth", "push notification"]
+                needs_mfa = any(w in page_content.lower() for w in mfa_words)
 
             if needs_mfa:
                 print()
@@ -161,14 +148,15 @@ async def login_with_playwright(username: str, password: str) -> dict:
                 for i in range(120):
                     await page.wait_for_timeout(1000)
                     current_url = page.url.lower()
-                    if "learn.dcollege" in current_url:
-                        print("  MFA approved! Redirected to Blackboard.")
+                    # Done if we left Microsoft
+                    if "microsoftonline" not in current_url and "login.microsoft" not in current_url:
+                        print(f"  MFA approved! Now on: {current_url[:80]}")
                         break
                     # Check for "Stay signed in?" prompt (means MFA passed)
                     try:
-                        stay_signed = page.locator('input[value="Yes"], input[value="No"], #idBtn_Back')
-                        if await stay_signed.first.is_visible():
-                            print("  MFA approved! Handling 'Stay signed in' prompt...")
+                        kmsi = page.locator('#KmsiDescription, input[value="Yes"], input[value="No"]')
+                        if await kmsi.first.is_visible():
+                            print("  MFA approved! 'Stay signed in' prompt detected.")
                             break
                     except Exception:
                         pass
@@ -182,22 +170,38 @@ async def login_with_playwright(username: str, password: str) -> dict:
                 print("  Clicked 'Yes' on stay signed in")
                 await page.wait_for_timeout(5000)
             except Exception:
-                try:
-                    no_btn = page.locator('input[value="No"], input#idBtn_Back')
-                    await no_btn.first.click(timeout=3000)
-                    await page.wait_for_timeout(3000)
-                except Exception:
-                    pass
+                pass
 
-            # ── Step 5: Wait for Blackboard to load ──
             current = page.url
-            print(f"  After SSO: {current[:120]}")
-            if "learn.dcollege.net" not in current:
-                print("  Waiting for Blackboard redirect...")
+            print(f"  After Drexel Connect SSO: {current[:120]}")
+
+            # ── Step 5: Navigate to Blackboard (Drexel Learn) ──
+            print("  Now navigating to Blackboard (learn.dcollege.net)...")
+            await page.goto(BB_URL, wait_until="domcontentloaded", timeout=90000)
+            await page.wait_for_timeout(8000)
+
+            # If Blackboard triggers another SSO, it should auto-complete
+            current = page.url.lower()
+            if "microsoftonline" in current or "login.microsoft" in current:
+                print("  Blackboard SSO redirect — should auto-complete with existing session...")
                 try:
                     await page.wait_for_url("**learn.dcollege.net**", timeout=30000)
                 except Exception:
-                    print("  Navigating directly to Blackboard...")
+                    # Try clicking through account picker
+                    try:
+                        acct = page.locator(f'small:has-text("{username}"), div[data-test-id="{username}"]')
+                        await acct.first.click(timeout=5000)
+                        await page.wait_for_timeout(5000)
+                    except Exception:
+                        pass
+
+            # Wait for Blackboard
+            current = page.url
+            if "learn.dcollege.net" not in current:
+                print(f"  Not on Blackboard yet ({current[:80]}), waiting...")
+                try:
+                    await page.wait_for_url("**learn.dcollege.net**", timeout=30000)
+                except Exception:
                     await page.goto(BB_URL, wait_until="domcontentloaded", timeout=60000)
                     await page.wait_for_timeout(5000)
 
