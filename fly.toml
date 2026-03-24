@@ -8,6 +8,7 @@ primary_region = "iad"
   PORT = "10000"
   DISPLAY = ":99"
   PLAYWRIGHT_CHROMIUM_SANDBOX = "0"
+  PYTHONUNBUFFERED = "1"
 
 [http_service]
   internal_port = 10000

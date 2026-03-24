@@ -33,6 +33,7 @@ ENV DISPLAY=:99
 
 # Chromium memory optimizations
 ENV PLAYWRIGHT_CHROMIUM_SANDBOX=0
+ENV PYTHONUNBUFFERED=1
 ENV CHROMIUM_FLAGS="--disable-gpu --disable-dev-shm-usage --disable-software-rasterizer --no-zygote --single-process --disable-extensions"
 
 EXPOSE 10000
