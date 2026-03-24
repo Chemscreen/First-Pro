@@ -430,12 +430,27 @@ def api_bb_login():
     _login_status["error"] = None
 
     def do_login():
+        global _bb_session
         try:
-            from drexel_login import get_cookie_string
+            from drexel_login import get_cookie_string, test_session
             cookie_str = get_cookie_string()
+            if not cookie_str:
+                raise Exception("Login returned empty cookies")
+            # Validate the session actually works
+            if not test_session(cookie_str):
+                raise Exception("Login got cookies but Blackboard API rejected them — MFA may not have been approved")
+            # Pre-populate the session so /api/status works immediately
+            session_obj = http.Session()
+            session_obj.headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0"
+            for pair in cookie_str.split(";"):
+                pair = pair.strip()
+                if "=" in pair:
+                    name, value = pair.split("=", 1)
+                    session_obj.cookies.set(name.strip(), value.strip())
+            _bb_session = session_obj
             _login_status["success"] = True
             _login_status["error"] = None
-            print("  Background login completed successfully!")
+            print("  Background login completed and validated!")
         except Exception as e:
             _login_status["success"] = False
             _login_status["error"] = str(e)
@@ -476,7 +491,10 @@ def index():
 def static_files(path):
     # Allow CSS/JS/fonts without auth (needed for login page)
     if path.endswith((".css", ".js", ".woff2", ".woff", ".ttf", ".png", ".ico", ".svg")):
-        return send_from_directory("static", path)
+        resp = make_response(send_from_directory("static", path))
+        # Prevent aggressive caching so style updates apply immediately
+        resp.headers["Cache-Control"] = "no-cache, must-revalidate"
+        return resp
     # Login page is public
     if path == "login" or path == "login.html":
         return send_from_directory("static", "login.html")
