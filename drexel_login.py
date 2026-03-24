@@ -176,34 +176,43 @@ async def login_with_playwright(username: str, password: str) -> dict:
             print(f"  After Drexel Connect SSO: {current[:120]}")
 
             # ── Step 5: Navigate to Blackboard (Drexel Learn) ──
-            print("  Now navigating to Blackboard (learn.dcollege.net)...")
-            await page.goto(BB_URL, wait_until="domcontentloaded", timeout=90000)
-            await page.wait_for_timeout(8000)
+            # Use the SAML login entry point for Blackboard Ultra
+            bb_login_url = f"{BB_URL}/ultra/institution-page"
+            print(f"  Now navigating to Blackboard ({bb_login_url})...")
+            await page.goto(bb_login_url, wait_until="networkidle", timeout=90000)
+            await page.wait_for_timeout(5000)
 
-            # If Blackboard triggers another SSO, it should auto-complete
             current = page.url.lower()
-            if "microsoftonline" in current or "login.microsoft" in current:
-                print("  Blackboard SSO redirect — should auto-complete with existing session...")
-                try:
-                    await page.wait_for_url("**learn.dcollege.net**", timeout=30000)
-                except Exception:
-                    # Try clicking through account picker
-                    try:
-                        acct = page.locator(f'small:has-text("{username}"), div[data-test-id="{username}"]')
-                        await acct.first.click(timeout=5000)
-                        await page.wait_for_timeout(5000)
-                    except Exception:
-                        pass
+            print(f"  After BB nav: {current[:120]}")
 
-            # Wait for Blackboard
+            # If Blackboard triggers SSO redirect, handle it
+            if "microsoftonline" in current or "login.microsoft" in current:
+                print("  Blackboard SSO redirect detected...")
+
+                # If account picker shows, click our account
+                try:
+                    acct = page.locator(f'small:has-text("{username}"), div[data-test-id="{username}"]')
+                    if await acct.first.is_visible(timeout=3000):
+                        await acct.first.click()
+                        print(f"  Clicked account: {username}")
+                        await page.wait_for_timeout(5000)
+                except Exception:
+                    pass
+
+                # Wait for redirect back to Blackboard (up to 60s)
+                print("  Waiting for Blackboard redirect...")
+                try:
+                    await page.wait_for_url("**learn.dcollege.net**", timeout=60000)
+                    await page.wait_for_timeout(5000)
+                except Exception:
+                    print(f"  Still on: {page.url[:120]}")
+
+            # If still not on Blackboard, try direct URL
             current = page.url
             if "learn.dcollege.net" not in current:
-                print(f"  Not on Blackboard yet ({current[:80]}), waiting...")
-                try:
-                    await page.wait_for_url("**learn.dcollege.net**", timeout=30000)
-                except Exception:
-                    await page.goto(BB_URL, wait_until="domcontentloaded", timeout=60000)
-                    await page.wait_for_timeout(5000)
+                print(f"  Not on Blackboard yet ({current[:80]}), trying direct...")
+                await page.goto(BB_URL, wait_until="networkidle", timeout=60000)
+                await page.wait_for_timeout(5000)
 
             final_url = page.url
             print(f"  Final URL: {final_url[:120]}")
@@ -211,18 +220,30 @@ async def login_with_playwright(username: str, password: str) -> dict:
             # ── Step 6: Extract cookies ──
             cookies_list = await context.cookies()
 
+            # Log all cookie domains for debugging
+            domains = set(c.get("domain", "?") for c in cookies_list)
+            print(f"  Cookie domains: {domains}")
+            print(f"  Total cookies from browser: {len(cookies_list)}")
+
+            # Prioritize Blackboard-specific cookies
             cookie_dict = {}
+            bb_cookies = {}
             for c in cookies_list:
                 domain = c.get("domain", "")
                 if "dcollege.net" in domain or "blackboard" in domain:
-                    cookie_dict[c["name"]] = c["value"]
+                    bb_cookies[c["name"]] = c["value"]
 
-            if not cookie_dict:
-                print(f"  No dcollege.net cookies found, grabbing all {len(cookies_list)} cookies...")
+            if bb_cookies:
+                cookie_dict = bb_cookies
+                print(f"  Blackboard cookies ({len(bb_cookies)}): {list(bb_cookies.keys())}")
+            else:
+                print("  WARNING: No dcollege.net/blackboard cookies found!")
+                print("  This likely means Blackboard SSO didn't complete.")
+                # Grab everything as fallback
                 for c in cookies_list:
                     cookie_dict[c["name"]] = c["value"]
+                print(f"  Using all {len(cookie_dict)} cookies as fallback")
 
-            print(f"  Got {len(cookie_dict)} cookies from browser")
             return cookie_dict
 
         finally:
@@ -289,16 +310,23 @@ def test_session(cookie_string: str) -> bool:
     import requests
     session = requests.Session()
     session.headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0"
+    cookie_names = []
     for pair in cookie_string.split(";"):
         pair = pair.strip()
         if "=" in pair:
             name, value = pair.split("=", 1)
             session.cookies.set(name.strip(), value.strip())
+            cookie_names.append(name.strip())
 
+    print(f"  Testing session with cookies: {cookie_names}")
     try:
         resp = session.get(f"{BB_URL}/learn/api/public/v1/users/me", timeout=15)
+        print(f"  Test result: {resp.status_code} {resp.reason}")
+        if not resp.ok:
+            print(f"  Response body: {resp.text[:300]}")
         return resp.ok
-    except Exception:
+    except Exception as e:
+        print(f"  Test error: {e}")
         return False
 
 
