@@ -29,6 +29,10 @@ primary_region = "iad"
   timeout = "5s"
   path = "/login"
 
+[mounts]
+  source = "session_data"
+  destination = "/data"
+
 [[vm]]
   memory = "1gb"
   cpu_kind = "shared"

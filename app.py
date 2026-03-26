@@ -37,11 +37,9 @@ def require_auth(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         if not ACCESS_PASSWORD:
-            # No password set, allow access (dev mode)
             return f(*args, **kwargs)
         if session.get("authenticated"):
             return f(*args, **kwargs)
-        # For API routes, return 401
         if request.path.startswith("/api/"):
             return jsonify({"error": "Unauthorized"}), 401
         return redirect("/login")
@@ -79,73 +77,105 @@ BB_API = f"{BB_URL}/learn/api/public/v1"
 
 _bb_session = None
 _bb_lock = threading.Lock()
+_bb_validated = False  # Track if session has been validated
 
 
 def get_bb_session() -> http.Session:
     """Get or create a Blackboard requests session with valid cookies."""
-    global _bb_session
+    global _bb_session, _bb_validated
 
     with _bb_lock:
-        if _bb_session:
+        if _bb_session and _bb_validated:
             return _bb_session
 
-        session_obj = http.Session()
-        session_obj.headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0"
-
-        # Try saved session first
         from drexel_login import load_session, get_cookie_string, test_session
 
+        # Try saved session first
         saved = load_session()
         if saved:
             cookie_str = saved["cookie_string"]
+            session_obj = http.Session()
+            session_obj.headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0"
             for pair in cookie_str.split(";"):
                 pair = pair.strip()
                 if "=" in pair:
                     name, value = pair.split("=", 1)
                     session_obj.cookies.set(name.strip(), value.strip())
 
-            # Quick validity check
-            resp = session_obj.get(f"{BB_API}/users/me", timeout=10)
-            if resp.ok:
-                _bb_session = session_obj
-                return session_obj
+            # Validate the session
+            print("  Validating saved Blackboard session...")
+            try:
+                resp = session_obj.get(f"{BB_API}/users/me", timeout=15)
+                print(f"  Validation: {resp.status_code} {resp.reason}")
+                if resp.ok:
+                    try:
+                        user = resp.json()
+                        name = user.get("name", {})
+                        print(f"  Connected as: {name.get('given', '')} {name.get('family', '')} ({user.get('userName', '')})")
+                    except Exception:
+                        pass
+                    _bb_session = session_obj
+                    _bb_validated = True
+                    return session_obj
+                else:
+                    print(f"  Saved session INVALID: {resp.text[:200]}")
+            except Exception as e:
+                print(f"  Validation error: {e}")
 
         # Need fresh login
-        print("  Logging into Blackboard...")
-        cookie_str = get_cookie_string()
-        session_obj = http.Session()
-        session_obj.headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0"
-        for pair in cookie_str.split(";"):
-            pair = pair.strip()
-            if "=" in pair:
-                name, value = pair.split("=", 1)
-                session_obj.cookies.set(name.strip(), value.strip())
+        print("  Logging into Blackboard (fresh login)...")
+        try:
+            cookie_str = get_cookie_string()
+            if not cookie_str:
+                print("  ERROR: get_cookie_string returned empty!")
+                raise Exception("Login returned empty cookies")
 
-        _bb_session = session_obj
-        return session_obj
+            # Validate the fresh session
+            print("  Validating fresh session...")
+            if test_session(cookie_str):
+                session_obj = http.Session()
+                session_obj.headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0"
+                for pair in cookie_str.split(";"):
+                    pair = pair.strip()
+                    if "=" in pair:
+                        name, value = pair.split("=", 1)
+                        session_obj.cookies.set(name.strip(), value.strip())
+                _bb_session = session_obj
+                _bb_validated = True
+                print("  Fresh session validated and cached!")
+                return session_obj
+            else:
+                print("  ERROR: Fresh login got cookies but they don't work with the API!")
+                print("  This likely means Blackboard requires different authentication for REST API access.")
+                raise Exception("Cookies captured but Blackboard API rejected them")
+        except Exception as e:
+            print(f"  Login failed: {e}")
+            raise
 
 
 def bb_get(path, params=None):
     """Make a GET request to Blackboard API."""
+    global _bb_session, _bb_validated
     try:
         session_obj = get_bb_session()
         resp = session_obj.get(f"{BB_API}{path}", params=params or {}, timeout=15)
-        print(f"  BB GET {path} => {resp.status_code}")
+        print(f"  BB API {path} => {resp.status_code}")
+
         if resp.status_code == 401:
-            # Session expired, force re-login
-            global _bb_session
+            print("  Session expired, forcing re-login...")
             _bb_session = None
+            _bb_validated = False
             session_obj = get_bb_session()
             resp = session_obj.get(f"{BB_API}{path}", params=params or {}, timeout=15)
-            print(f"  BB GET {path} (retry) => {resp.status_code}")
+            print(f"  BB API {path} (retry) => {resp.status_code}")
+
         if resp.ok:
             data = resp.json()
-            # Log result summary for debugging
             if isinstance(data, dict) and "results" in data:
-                print(f"  BB GET {path} => {len(data['results'])} results")
+                print(f"  BB API {path} => {len(data['results'])} results")
             return data
         else:
-            print(f"  BB GET {path} => FAILED: {resp.text[:200]}")
+            print(f"  BB API {path} FAILED: {resp.text[:300]}")
     except Exception as e:
         print(f"  BB API error ({path}): {e}")
     return None
@@ -156,19 +186,22 @@ def bb_get(path, params=None):
 @app.route("/api/status")
 @require_auth
 def api_status():
-    user = bb_get("/users/me")
-    if user:
-        name_data = user.get("name", {})
-        full_name = f"{name_data.get('given', '')} {name_data.get('family', '')}".strip()
-        return jsonify({
-            "connected": True,
-            "platform": "blackboard",
-            "user": {
-                "name": full_name or user.get("userName", ""),
-                "avatar": user.get("avatar", {}).get("viewUrl", ""),
-                "username": user.get("userName", ""),
-            },
-        })
+    try:
+        user = bb_get("/users/me")
+        if user:
+            name_data = user.get("name", {})
+            full_name = f"{name_data.get('given', '')} {name_data.get('family', '')}".strip()
+            return jsonify({
+                "connected": True,
+                "platform": "blackboard",
+                "user": {
+                    "name": full_name or user.get("userName", ""),
+                    "avatar": user.get("avatar", {}).get("viewUrl", ""),
+                    "username": user.get("userName", ""),
+                },
+            })
+    except Exception as e:
+        print(f"  /api/status error: {e}")
     return jsonify({"connected": False, "error": "Not connected to Blackboard"})
 
 
@@ -424,34 +457,40 @@ def api_grades():
     return jsonify(grades)
 
 
-_login_status = {"running": False, "success": None, "error": None}
+_login_status = {"running": False, "success": None, "error": None, "step": ""}
 
 
 @app.route("/api/login", methods=["POST"])
 @require_auth
 def api_bb_login():
     """Trigger Blackboard login in background thread."""
-    global _bb_session
+    global _bb_session, _bb_validated
 
     if _login_status["running"]:
         return jsonify({"success": False, "error": "Login already in progress", "status": "running"})
 
     _bb_session = None
+    _bb_validated = False
     _login_status["running"] = True
     _login_status["success"] = None
     _login_status["error"] = None
+    _login_status["step"] = "Starting login..."
 
     def do_login():
-        global _bb_session
+        global _bb_session, _bb_validated
         try:
             from drexel_login import get_cookie_string, test_session
+
+            _login_status["step"] = "Running Playwright login (SSO + MFA)..."
             cookie_str = get_cookie_string()
             if not cookie_str:
                 raise Exception("Login returned empty cookies")
-            # Validate the session actually works
+
+            _login_status["step"] = "Validating session with Blackboard API..."
             if not test_session(cookie_str):
-                raise Exception("Login got cookies but Blackboard API rejected them — MFA may not have been approved")
-            # Pre-populate the session so /api/status works immediately
+                raise Exception("Login got cookies but Blackboard API rejected them — session may be invalid")
+
+            # Pre-populate the session
             session_obj = http.Session()
             session_obj.headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0"
             for pair in cookie_str.split(";"):
@@ -460,12 +499,15 @@ def api_bb_login():
                     name, value = pair.split("=", 1)
                     session_obj.cookies.set(name.strip(), value.strip())
             _bb_session = session_obj
+            _bb_validated = True
             _login_status["success"] = True
             _login_status["error"] = None
+            _login_status["step"] = "Connected!"
             print("  Background login completed and validated!")
         except Exception as e:
             _login_status["success"] = False
             _login_status["error"] = str(e)
+            _login_status["step"] = f"Failed: {e}"
             print(f"  Background login failed: {e}")
         finally:
             _login_status["running"] = False
@@ -491,6 +533,52 @@ def api_login_status():
     return jsonify(_login_status)
 
 
+@app.route("/api/debug")
+@require_auth
+def api_debug():
+    """Debug endpoint showing connection diagnostics."""
+    from drexel_login import load_session, get_session_path
+    import time as _time
+
+    info = {
+        "bb_session_cached": _bb_session is not None,
+        "bb_session_validated": _bb_validated,
+        "session_file": str(get_session_path()),
+        "login_status": _login_status,
+    }
+
+    saved = load_session()
+    if saved:
+        age = _time.time() - saved.get("timestamp", 0)
+        info["saved_session"] = {
+            "exists": True,
+            "age_minutes": round(age / 60, 1),
+            "cookie_count": len(saved.get("cookies", {})),
+            "cookie_names": list(saved.get("cookies", {}).keys()),
+            "has_sso_cookies": len(saved.get("all_cookies", [])) > 0,
+            "sso_cookie_count": len(saved.get("all_cookies", [])),
+        }
+    else:
+        info["saved_session"] = {"exists": False}
+
+    # Quick API test
+    if _bb_session:
+        try:
+            resp = _bb_session.get(f"{BB_API}/users/me", timeout=10)
+            info["api_test"] = {
+                "status": resp.status_code,
+                "ok": resp.ok,
+                "body_preview": resp.text[:200] if not resp.ok else "OK",
+            }
+            if resp.ok:
+                user = resp.json()
+                info["api_test"]["user"] = user.get("userName", "")
+        except Exception as e:
+            info["api_test"] = {"error": str(e)}
+
+    return jsonify(info)
+
+
 # ── Frontend Serving ──────────────────────────────────────────────
 
 @app.route("/")
@@ -501,16 +589,12 @@ def index():
 
 @app.route("/<path:path>")
 def static_files(path):
-    # Allow CSS/JS/fonts without auth (needed for login page)
     if path.endswith((".css", ".js", ".woff2", ".woff", ".ttf", ".png", ".ico", ".svg")):
         resp = make_response(send_from_directory("static", path))
-        # Prevent aggressive caching so style updates apply immediately
         resp.headers["Cache-Control"] = "no-cache, must-revalidate"
         return resp
-    # Login page is public
     if path == "login" or path == "login.html":
         return send_from_directory("static", "login.html")
-    # Everything else requires auth
     @require_auth
     def serve():
         return send_from_directory("static", path)
@@ -520,10 +604,9 @@ def static_files(path):
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
     print()
-    print("  ╔═══════════════════════════════════╗")
-    print("  ║       SchuBase Auto Pilot         ║")
-    print(f"  ║       http://localhost:{port}        ║")
-    print("  ╚═══════════════════════════════════╝")
+    print("  SchuBase Auto Pilot")
+    print("  " + "=" * 25)
+    print(f"  http://localhost:{port}")
     print()
 
     if ACCESS_PASSWORD:
