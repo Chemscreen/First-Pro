@@ -106,6 +106,7 @@ function switchView(name) {
 
   if (name === 'assignments') renderAssignments();
   if (name === 'grades') renderGrades();
+  if (name === 'tracker') renderTracker();
 }
 
 document.addEventListener('click', (e) => {
@@ -415,6 +416,78 @@ function esc(str) {
   const div = document.createElement('div');
   div.textContent = String(str);
   return div.innerHTML;
+}
+
+// ── Discussion Tracker ───────────────────────────
+
+const TRACKER_KEY = 'schubase_tracker_682';
+const TOTAL_WEEKS = 10;
+const ITEMS_PER_WEEK = ['Initial Post', 'Reply 1', 'Reply 2', 'Reply 3'];
+
+function loadTracker() {
+  try {
+    return JSON.parse(localStorage.getItem(TRACKER_KEY)) || {};
+  } catch { return {}; }
+}
+
+function saveTracker(data) {
+  localStorage.setItem(TRACKER_KEY, JSON.stringify(data));
+}
+
+function toggleCheck(week, item) {
+  const data = loadTracker();
+  const key = `w${week}_${item}`;
+  data[key] = !data[key];
+  saveTracker(data);
+  renderTracker();
+}
+
+function renderTracker() {
+  const grid = $('#tracker-grid');
+  if (!grid) return;
+  const data = loadTracker();
+  let totalChecked = 0;
+  const totalItems = TOTAL_WEEKS * ITEMS_PER_WEEK.length;
+
+  let html = '';
+  for (let w = 1; w <= TOTAL_WEEKS; w++) {
+    let weekChecked = 0;
+    ITEMS_PER_WEEK.forEach((_, i) => {
+      if (data[`w${w}_${i}`]) { weekChecked++; totalChecked++; }
+    });
+
+    const status = weekChecked === 4 ? 'done' : weekChecked > 0 ? 'partial' : 'todo';
+    const statusLabel = weekChecked === 4 ? 'Complete' : weekChecked > 0 ? `${weekChecked}/4` : 'Not started';
+
+    html += `
+      <div class="tracker-week ${weekChecked === 4 ? 'complete' : ''}">
+        <div class="tracker-week-header">
+          <span class="tracker-week-title">Week ${w}</span>
+          <span class="tracker-week-status ${status}">${statusLabel}</span>
+        </div>
+        <div class="tracker-checks">
+          ${ITEMS_PER_WEEK.map((label, i) => {
+            const checked = data[`w${w}_${i}`];
+            return `
+              <div class="tracker-check ${checked ? 'checked' : ''}" onclick="toggleCheck(${w}, ${i})">
+                <div class="tracker-checkbox">
+                  ${checked ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
+                </div>
+                <span class="tracker-check-label">${label}</span>
+              </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+  }
+
+  grid.innerHTML = html;
+
+  // Update progress
+  const pct = Math.round((totalChecked / totalItems) * 100);
+  const fill = $('#tracker-progress-fill');
+  const text = $('#tracker-progress-text');
+  if (fill) fill.style.width = `${pct}%`;
+  if (text) text.textContent = `${totalChecked} / ${totalItems} completed (${pct}%)`;
 }
 
 // ── Boot ─────────────────────────────────────────

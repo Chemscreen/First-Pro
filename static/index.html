@@ -27,6 +27,7 @@
         <button class="nav-link active" data-view="dashboard">Dashboard</button>
         <button class="nav-link" data-view="assignments">Assignments</button>
         <button class="nav-link" data-view="grades">Grades</button>
+        <button class="nav-link" data-view="tracker">Tracker</button>
       </div>
       <div class="nav-user" id="nav-user"></div>
     </div>
@@ -113,6 +114,20 @@
         Back
       </button>
       <div id="course-detail"></div>
+    </section>
+
+    <!-- Discussion Tracker View -->
+    <section id="view-tracker" class="view">
+      <div class="view-header">
+        <h1>Discussion Tracker</h1>
+        <span class="tracker-course-badge">DSCI 682</span>
+      </div>
+      <p class="tracker-desc">Each week: 1 initial post + 3 replies on separate days. Check them off as you go.</p>
+      <div class="tracker-progress-bar">
+        <div class="tracker-progress-fill" id="tracker-progress-fill"></div>
+      </div>
+      <p class="tracker-progress-text" id="tracker-progress-text">0 / 40 completed</p>
+      <div class="tracker-grid" id="tracker-grid"></div>
     </section>
 
     <!-- Setup View -->
